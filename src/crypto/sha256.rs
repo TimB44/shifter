@@ -44,9 +44,9 @@ pub fn sha256(message: &[u8]) -> Key256 {
             |(mut words, cur_word), (index, cur_byte)| {
                 let new_word = cur_word << 8 | cur_byte as u32;
                 if index % 4 == 3 {
-                    words.push(cur_word)
+                    words.push(new_word)
                 }
-                (words, cur_word)
+                (words, new_word)
             },
         )
         .0;
@@ -55,14 +55,16 @@ pub fn sha256(message: &[u8]) -> Key256 {
 
     let mut current_hash_value = INITIAL_HASH_VALUE;
     for chunk in padded_words.chunks_exact(16) {
-        let mut w = vec![0, 64];
-        w.copy_from_slice(chunk);
+        let mut w = [0; 64];
+        w[0..16].copy_from_slice(chunk);
         for i in 16..64 {
-            let s0 =
-                w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ w[i - 15].rotate_right(3);
+            let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
+            let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
 
-            let s1 =
-                w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ w[i - 2].rotate_right(10);
+            w[i] = w[i - 16]
+                .wrapping_add(s0)
+                .wrapping_add(w[i - 7])
+                .wrapping_add(s1);
         }
         let mut a = current_hash_value[0];
         let mut b = current_hash_value[1];
@@ -76,7 +78,11 @@ pub fn sha256(message: &[u8]) -> Key256 {
         for i in 0..64 {
             let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
             let ch = (e & f) ^ ((!e) & g);
-            let temp1 = h.wrapping_add(s1.wrapping_add(ch.wrapping_add(K[i].wrapping_add(w[i]))));
+            let temp1 = h
+                .wrapping_add(s1)
+                .wrapping_add(ch)
+                .wrapping_add(K[i])
+                .wrapping_add(w[i]);
 
             let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
             let maj = (a & b) ^ (a & c) ^ (b & c);
@@ -85,11 +91,11 @@ pub fn sha256(message: &[u8]) -> Key256 {
             h = g;
             g = f;
             f = e;
-            e = d + temp1;
+            e = d.wrapping_add(temp1);
             d = c;
             c = b;
             b = a;
-            a = temp1 + temp2;
+            a = temp1.wrapping_add(temp2);
         }
 
         current_hash_value[0] = current_hash_value[0].wrapping_add(a);
