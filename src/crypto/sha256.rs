@@ -113,7 +113,10 @@ pub fn sha256(message: &[u8]) -> Key256 {
 
 #[cfg(test)]
 mod sha256_tests {
+
     use super::*;
+    use rand::{thread_rng, RngCore};
+    use sha2::{Digest, Sha256};
 
     #[test]
     fn hash_hello_world() {
@@ -124,5 +127,27 @@ mod sha256_tests {
                 0x126d9069
             ]
         )
+    }
+
+    #[test]
+    fn fuzz() {
+        let mut rand = rand::thread_rng();
+
+        let mut buf = [0; 5000];
+        for input_len in 0..5000 {
+            for _ in 0..50 {
+                rand.fill_bytes(&mut buf[0..input_len]);
+                let mut hasher = Sha256::new();
+                hasher.update(&buf[0..input_len]);
+                assert_eq!(
+                    hasher.finalize().as_slice(),
+                    sha256(&buf[0..input_len])
+                        .iter()
+                        .map(|w| w.to_be_bytes())
+                        .flatten()
+                        .collect::<Vec<_>>()
+                )
+            }
+        }
     }
 }
