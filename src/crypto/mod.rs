@@ -1,3 +1,4 @@
 mod sha256;
 
-type Key256 = [u32; 8];
+pub type Key256 = [u8; 32];
+pub use sha256::sha256;

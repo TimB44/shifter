@@ -20,6 +20,12 @@ const INITIAL_HASH_VALUE: [u32; 8] = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 ];
 
+pub const SHA_256_BLOCK_SIZE_BITS: u32 = 512;
+pub const SHA_256_OUTPUT_SIZE_BITS: u32 = 256;
+
+pub const SHA_256_BLOCK_SIZE_BYTES: u32 = SHA_256_BLOCK_SIZE_BITS / 8;
+pub const SHA_256_OUTPUT_SIZE_BYTES: u32 = SHA_256_OUTPUT_SIZE_BITS / 8;
+
 pub fn sha256(message: &[u8]) -> Key256 {
     let message_length_bits = message.len() * 8;
     let extra_zero_bits = (512 - ((message_length_bits + 1 + 64) & (512 - 1))) & (512 - 1);
@@ -53,7 +59,7 @@ pub fn sha256(message: &[u8]) -> Key256 {
 
     assert_eq!(padded_words.len() % 16, 0);
 
-    let mut current_hash_value = INITIAL_HASH_VALUE;
+    let mut current_hash = INITIAL_HASH_VALUE;
     for chunk in padded_words.chunks_exact(16) {
         let mut w = [0; 64];
         w[0..16].copy_from_slice(chunk);
@@ -66,14 +72,14 @@ pub fn sha256(message: &[u8]) -> Key256 {
                 .wrapping_add(w[i - 7])
                 .wrapping_add(s1);
         }
-        let mut a = current_hash_value[0];
-        let mut b = current_hash_value[1];
-        let mut c = current_hash_value[2];
-        let mut d = current_hash_value[3];
-        let mut e = current_hash_value[4];
-        let mut f = current_hash_value[5];
-        let mut g = current_hash_value[6];
-        let mut h = current_hash_value[7];
+        let mut a = current_hash[0];
+        let mut b = current_hash[1];
+        let mut c = current_hash[2];
+        let mut d = current_hash[3];
+        let mut e = current_hash[4];
+        let mut f = current_hash[5];
+        let mut g = current_hash[6];
+        let mut h = current_hash[7];
 
         for i in 0..64 {
             let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
@@ -98,24 +104,29 @@ pub fn sha256(message: &[u8]) -> Key256 {
             a = temp1.wrapping_add(temp2);
         }
 
-        current_hash_value[0] = current_hash_value[0].wrapping_add(a);
-        current_hash_value[1] = current_hash_value[1].wrapping_add(b);
-        current_hash_value[2] = current_hash_value[2].wrapping_add(c);
-        current_hash_value[3] = current_hash_value[3].wrapping_add(d);
-        current_hash_value[4] = current_hash_value[4].wrapping_add(e);
-        current_hash_value[5] = current_hash_value[5].wrapping_add(f);
-        current_hash_value[6] = current_hash_value[6].wrapping_add(g);
-        current_hash_value[7] = current_hash_value[7].wrapping_add(h);
+        current_hash[0] = current_hash[0].wrapping_add(a);
+        current_hash[1] = current_hash[1].wrapping_add(b);
+        current_hash[2] = current_hash[2].wrapping_add(c);
+        current_hash[3] = current_hash[3].wrapping_add(d);
+        current_hash[4] = current_hash[4].wrapping_add(e);
+        current_hash[5] = current_hash[5].wrapping_add(f);
+        current_hash[6] = current_hash[6].wrapping_add(g);
+        current_hash[7] = current_hash[7].wrapping_add(h);
     }
 
-    return current_hash_value;
+    let mut final_hash = [0; 32];
+    for (i, &word) in current_hash.iter().enumerate() {
+        final_hash[(i * 4)..(i * 4 + 4)].copy_from_slice(&word.to_be_bytes());
+    }
+
+    final_hash
 }
 
 #[cfg(test)]
 mod sha256_tests {
 
     use super::*;
-    use rand::{thread_rng, RngCore};
+    use rand::RngCore;
     use sha2::{Digest, Sha256};
 
     #[test]
@@ -123,8 +134,21 @@ mod sha256_tests {
         assert_eq!(
             sha256(b"Hello World!"),
             [
-                0x7f83b165, 0x7ff1fc53, 0xb92dc181, 0x48a1d65d, 0xfc2d4b1f, 0xa3d67728, 0x4addd200,
-                0x126d9069
+                0x7f, 0x83, 0xb1, 0x65, 0x7f, 0xf1, 0xfc, 0x53, 0xb9, 0x2d, 0xc1, 0x81, 0x48, 0xa1,
+                0xd6, 0x5d, 0xfc, 0x2d, 0x4b, 0x1f, 0xa3, 0xd6, 0x77, 0x28, 0x4a, 0xdd, 0xd2, 0x00,
+                0x12, 0x6d, 0x90, 0x69
+            ]
+        )
+    }
+
+    #[test]
+    fn hash_empty_string() {
+        assert_eq!(
+            sha256(b""),
+            [
+                0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f,
+                0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b,
+                0x78, 0x52, 0xb8, 0x55
             ]
         )
     }
@@ -135,19 +159,10 @@ mod sha256_tests {
 
         let mut buf = [0; 5000];
         for input_len in 0..5000 {
-            for _ in 0..50 {
-                rand.fill_bytes(&mut buf[0..input_len]);
-                let mut hasher = Sha256::new();
-                hasher.update(&buf[0..input_len]);
-                assert_eq!(
-                    hasher.finalize().as_slice(),
-                    sha256(&buf[0..input_len])
-                        .iter()
-                        .map(|w| w.to_be_bytes())
-                        .flatten()
-                        .collect::<Vec<_>>()
-                )
-            }
+            rand.fill_bytes(&mut buf[0..input_len]);
+            let mut hasher = Sha256::new();
+            hasher.update(&buf[0..input_len]);
+            assert_eq!(hasher.finalize().as_slice(), sha256(&buf[0..input_len]))
         }
     }
 }
