@@ -35,7 +35,7 @@ pub fn sha256(message: &[u8]) -> Key256 {
     debug_assert_eq!((extra_zero_bits - 7) % 8, 0);
     //Vec::with_capacity(total_message_len_bits / 32);
 
-    let padded_words = message
+    let mut iter = message
         .iter()
         .copied()
         //Add a 1 and 7 zeros to the end
@@ -43,19 +43,17 @@ pub fn sha256(message: &[u8]) -> Key256 {
         // Add the rest of the zero padding
         .chain(repeat_n(0, (extra_zero_bits - 7) / 8))
         // add the size in bits as a BE 64 bit integer
-        .chain(message_length_bits.to_be_bytes())
-        .enumerate()
-        .fold::<(Vec<u32>, u32), _>(
-            (Vec::with_capacity(total_message_len_bits / 32), 0),
-            |(mut words, cur_word), (index, cur_byte)| {
-                let new_word = cur_word << 8 | cur_byte as u32;
-                if index % 4 == 3 {
-                    words.push(new_word)
-                }
-                (words, new_word)
-            },
-        )
-        .0;
+        .chain((message_length_bits as u64).to_be_bytes());
+
+    let mut padded_words = vec![0; total_message_len_bits / 32];
+    for location in padded_words.iter_mut() {
+        *location = u32::from_be_bytes([
+            iter.next().unwrap(),
+            iter.next().unwrap(),
+            iter.next().unwrap(),
+            iter.next().unwrap(),
+        ])
+    }
 
     assert_eq!(padded_words.len() % 16, 0);
 

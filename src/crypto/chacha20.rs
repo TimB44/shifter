@@ -1,8 +1,6 @@
 use crate::crypto::utils::slice_xor_assign;
 
-use super::Key256;
-
-const CHA_CHA_WORD_SIZE: usize = 4;
+//const CHA_CHA_WORD_SIZE: usize = 4;
 const CHA_CHA_STATE_WORD_SIZE: usize = 16;
 const CHA_CHA_STATE_BYTE_SIZE: usize = CHA_CHA_STATE_WORD_SIZE * 4;
 const CHA_CHA_ROUND_COUNT: u32 = 20;

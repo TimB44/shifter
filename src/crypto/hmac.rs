@@ -1,5 +1,3 @@
-use std::{iter, u32};
-
 use crate::crypto::{
     sha256::{sha256, SHA_256_BLOCK_SIZE_BYTES, SHA_256_OUTPUT_SIZE_BYTES},
     utils::slice_xor_assign,
