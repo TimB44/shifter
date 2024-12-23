@@ -1,7 +1,7 @@
 use crate::crypto::{
     sha256::{sha256, SHA_256_BLOCK_SIZE_BYTES, SHA_256_OUTPUT_SIZE_BYTES},
     utils::slice_xor_assign,
-    Key256,
+    U256,
 };
 
 const I_PAD: [u8; SHA_256_BLOCK_SIZE_BYTES as usize] = [0x36; SHA_256_BLOCK_SIZE_BYTES as usize];
@@ -11,7 +11,7 @@ const O_PAD: [u8; SHA_256_BLOCK_SIZE_BYTES as usize] = [0x5C; SHA_256_BLOCK_SIZE
 /// Reference from
 /// https://datatracker.ietf.org/doc/html/rfc2104#autoid-2
 /// https://datatracker.ietf.org/doc/html/rfc4868#autoid-3
-pub fn hmac_sha256(key: &[u8], message: &[u8]) -> Key256 {
+pub fn hmac_sha256(key: &[u8], message: &[u8]) -> U256 {
     debug_assert!(key.len() < u32::MAX as usize, "key too large");
     if key.len() as u32 > SHA_256_BLOCK_SIZE_BYTES {
         return hmac_sha256(&sha256(key), message);

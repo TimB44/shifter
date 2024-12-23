@@ -4,4 +4,4 @@ pub mod pbkdf2;
 pub mod sha256;
 pub mod utils;
 
-pub type Key256 = [u8; 32];
+pub type U256 = [u8; 32];

@@ -3,7 +3,7 @@ use std::iter::repeat_n;
 /// Implementation of the SHA-256 algorithm.
 /// Adopted from https://www.movable-type.co.uk/scripts/sha256.html and
 /// https://en.wikipedia.org/wiki/SHA-2.
-use super::Key256;
+use super::U256;
 
 const K: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -26,7 +26,7 @@ pub const SHA_256_OUTPUT_SIZE_BITS: u32 = 256;
 pub const SHA_256_BLOCK_SIZE_BYTES: u32 = SHA_256_BLOCK_SIZE_BITS / 8;
 pub const SHA_256_OUTPUT_SIZE_BYTES: u32 = SHA_256_OUTPUT_SIZE_BITS / 8;
 
-pub fn sha256(message: &[u8]) -> Key256 {
+pub fn sha256(message: &[u8]) -> U256 {
     let message_length_bits = message.len() * 8;
     let extra_zero_bits = (512 - ((message_length_bits + 1 + 64) & (512 - 1))) & (512 - 1);
     let total_message_len_bits = message_length_bits + 1 + 64 + extra_zero_bits;
