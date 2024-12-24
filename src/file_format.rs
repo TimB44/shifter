@@ -1,3 +1,4 @@
+/// This module contains the code the code to create, read and write shifter files  
 use std::{
     env::temp_dir,
     fs::File,
@@ -5,7 +6,7 @@ use std::{
     string::FromUtf8Error,
 };
 
-use rand::RngCore;
+use rand::{thread_rng, RngCore};
 use thiserror::Error;
 
 use crate::crypto::{chacha20, hmac_sha256, pbkdf2, U256};
@@ -15,17 +16,22 @@ const MIN_SUPPORTED_VERSION_NUMBER: u8 = 1;
 const MAX_SUPPORTED_VERSION_NUMBER: u8 = 1;
 const MAX_FILENAME_LENGTH: usize = 255;
 const CIPHERTEXT_OFFSET: u64 = 101;
+const SALT_LEN_BYTES: usize = 32;
+const KEY_LEN_BYTES: usize = 32;
+const HMAC_TAG_LEN_BYTES: usize = 32;
+const FILENAME_FILE_CONTENT_SEPERATOR: u8 = 0;
+
+// nonce is always zero as keys are unique from salt
+const CHACHA_NONCE: [u8; 12] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 // TODO: Find a good number which balances speed and security
 const PBKDF2_ITERATIONS: u32 = 1_000;
 
-/// This module contains the code the code to create, read and write shifter files  
-
-pub struct ShifterFile {
+pub struct EncryptedShifterFile {
     version_number: u8,
     hmac_tag: U256,
-    hmac_salt: U256,
-    chacha_salt: U256,
+    hmac_key_salt: U256,
+    chacha_key_salt: U256,
     file: File,
 }
 
@@ -75,8 +81,8 @@ pub enum ShifterFileDecryptError {
     NoNullByte,
 }
 
-impl ShifterFile {
-    pub fn load_from_file(mut file: File) -> Result<ShifterFile, ShifterFileParseError> {
+impl EncryptedShifterFile {
+    pub fn load_from_file(mut file: File) -> Result<EncryptedShifterFile, ShifterFileParseError> {
         let mut magic_number = [0; SHIFTER_FILE_MAGIC_NUMBER.len()];
         file.read_exact(&mut magic_number)?;
         if magic_number != *SHIFTER_FILE_MAGIC_NUMBER {
@@ -96,23 +102,48 @@ impl ShifterFile {
             });
         }
 
-        let mut hmac_tag = [0; 32];
+        let mut hmac_tag = [0; HMAC_TAG_LEN_BYTES];
         file.read_exact(&mut hmac_tag)?;
 
-        let mut hmac_salt = [0; 32];
+        let mut hmac_salt = [0; SALT_LEN_BYTES];
         file.read_exact(&mut hmac_salt)?;
 
-        let mut chacha_salt = [0; 32];
+        let mut chacha_salt = [0; SALT_LEN_BYTES];
         file.read_exact(&mut chacha_salt)?;
 
         let mut ciphertext = Vec::new();
         file.read_to_end(&mut ciphertext)?;
 
-        Ok(ShifterFile {
+        Ok(EncryptedShifterFile {
             version_number,
             hmac_tag,
-            hmac_salt,
-            chacha_salt,
+            hmac_key_salt: hmac_salt,
+            chacha_key_salt: chacha_salt,
+            file,
+        })
+    }
+
+    fn write_to_file(
+        hmac_tag: U256,
+        hmac_key_salt: U256,
+        chacha_key_salt: U256,
+        cipher_text: &[u8],
+        mut file: File,
+    ) -> Result<Self, io::Error> {
+        file.rewind()?;
+        file.set_len(0)?;
+        file.write_all(SHIFTER_FILE_MAGIC_NUMBER)?;
+        file.write_all(&[MAX_SUPPORTED_VERSION_NUMBER])?;
+        file.write_all(&hmac_tag)?;
+        file.write_all(&hmac_key_salt)?;
+        file.write_all(&chacha_key_salt)?;
+        file.write_all(cipher_text)?;
+
+        Ok(Self {
+            version_number: MAX_SUPPORTED_VERSION_NUMBER,
+            hmac_tag,
+            hmac_key_salt,
+            chacha_key_salt,
             file,
         })
     }
@@ -124,13 +155,13 @@ impl ShifterFile {
         // Compute both derived keys in parallel
         let (hmac_dk, chacha_dk) = rayon::join(
             || {
-                let mut buf = [0; 32];
-                pbkdf2(password, &self.hmac_salt, PBKDF2_ITERATIONS, &mut buf);
+                let mut buf = [0; KEY_LEN_BYTES];
+                pbkdf2(password, &self.hmac_key_salt, PBKDF2_ITERATIONS, &mut buf);
                 buf
             },
             || {
-                let mut buf = [0; 32];
-                pbkdf2(password, &self.hmac_salt, PBKDF2_ITERATIONS, &mut buf);
+                let mut buf = [0; KEY_LEN_BYTES];
+                pbkdf2(password, &self.chacha_key_salt, PBKDF2_ITERATIONS, &mut buf);
                 buf
             },
         );
@@ -147,11 +178,7 @@ impl ShifterFile {
             });
         }
 
-        let mut rand = rand::thread_rng();
-        let mut nonce = [0; 12];
-        rand.fill_bytes(&mut nonce);
-
-        chacha20(&chacha_dk, &nonce, &mut ciphertext, 0);
+        chacha20(&chacha_dk, &CHACHA_NONCE, &mut ciphertext, 0);
         let plaintext = ciphertext;
 
         // The first null byte is the seperator between the filename and filecontents
@@ -189,15 +216,58 @@ impl ShifterFile {
         self.version_number
     }
 
-    pub fn hmac_tag(&self) -> [u8; 32] {
+    pub fn hmac_tag(&self) -> U256 {
         self.hmac_tag
     }
 
-    pub fn hmac_salt(&self) -> [u8; 32] {
-        self.hmac_salt
+    pub fn hmac_salt(&self) -> U256 {
+        self.hmac_key_salt
     }
 
-    pub fn chacha_salt(&self) -> [u8; 32] {
-        self.chacha_salt
+    pub fn chacha_salt(&self) -> U256 {
+        self.chacha_key_salt
+    }
+}
+
+impl DecryptedShifterFile {
+    pub fn encrypt(
+        mut self,
+        password: &[u8],
+        out: File,
+    ) -> Result<EncryptedShifterFile, io::Error> {
+        let mut hmac_key_salt = [0; SALT_LEN_BYTES];
+        let mut chacha_key_salt = [0; SALT_LEN_BYTES];
+        let mut rng = thread_rng();
+        rng.fill_bytes(&mut hmac_key_salt);
+        rng.fill_bytes(&mut chacha_key_salt);
+
+        let (hmac_dk, chacha_dk) = rayon::join(
+            || {
+                let mut buf = [0; KEY_LEN_BYTES];
+                pbkdf2(password, &hmac_key_salt, PBKDF2_ITERATIONS, &mut buf);
+                buf
+            },
+            || {
+                let mut buf = [0; KEY_LEN_BYTES];
+                pbkdf2(password, &chacha_key_salt, PBKDF2_ITERATIONS, &mut buf);
+                buf
+            },
+        );
+
+        let mut plaintext = self.filename.as_bytes().to_vec();
+        plaintext.push(FILENAME_FILE_CONTENT_SEPERATOR);
+        self.contents.rewind()?;
+        self.contents.read_to_end(&mut plaintext)?;
+        chacha20(&chacha_dk, &CHACHA_NONCE, &mut plaintext, 0);
+        let ciphertext = plaintext;
+        let hmac_tag = hmac_sha256(&hmac_dk, &ciphertext);
+
+        EncryptedShifterFile::write_to_file(
+            hmac_tag,
+            hmac_key_salt,
+            chacha_key_salt,
+            &ciphertext,
+            out,
+        )
     }
 }
