@@ -58,11 +58,15 @@ pub enum ShifterFileDecryptError {
     InvalidFileNameLength {
         length: usize,
         filename: String,
-        file_contents: Vec<u8>,
+        file_contents: File,
     },
 
     #[error("filename is not invalid UTF8")]
-    InvalidFilenameUtf8(#[from] FromUtf8Error),
+    InvalidFilenameUtf8 {
+        #[source]
+        err: FromUtf8Error,
+        file_contents: File,
+    },
 
     #[error("error writing plaintext file")]
     IOError(#[from] io::Error),
@@ -156,21 +160,29 @@ impl ShifterFile {
             .position(|&b| b == 0)
             .ok_or(ShifterFileDecryptError::NoNullByte)?;
 
-        let filename = String::from_utf8(plaintext[0..split].to_vec())?;
+        let mut file_contents =
+            File::open(temp_dir().join(rand::thread_rng().next_u64().to_string()))?;
+        file_contents.write_all(&plaintext[split..])?;
+
+        let filename = match String::from_utf8(plaintext[0..split].to_vec()) {
+            Ok(filename) => filename,
+            Err(err) => {
+                return Err(ShifterFileDecryptError::InvalidFilenameUtf8 { err, file_contents })
+            }
+        };
 
         if split < 1 || split > MAX_FILENAME_LENGTH {
             return Err(ShifterFileDecryptError::InvalidFileNameLength {
                 length: split,
                 filename,
-                file_contents: plaintext[split..].to_vec(),
+                file_contents,
             });
         }
 
-        let mut contents = File::open(temp_dir().join(rand::thread_rng().next_u64().to_string()))?;
-
-        contents.write_all(&plaintext[split..])?;
-
-        return Ok(DecryptedShifterFile { filename, contents });
+        return Ok(DecryptedShifterFile {
+            filename,
+            contents: file_contents,
+        });
     }
 
     pub fn version_number(&self) -> u8 {
