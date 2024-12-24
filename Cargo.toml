@@ -6,9 +6,9 @@ edition = "2021"
 [dependencies]
 rand = "0.8.5"
 thiserror = "2.0.9"
+rayon = "1.10.0"
 
 # Used for differential fuzz testing
 [dev-dependencies]
 pbkdf2 = "0.12.2"
 sha2 = "0.10.8"
-rayon = "1.10.0"
