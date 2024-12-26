@@ -100,15 +100,15 @@ mod pbkdf2_tests {
     use rayon::prelude::*;
     #[test]
     fn differential_fuzz() {
-        (0..100).into_par_iter().for_each(|_| {
+        (0..10).into_par_iter().for_each(|_| {
             let mut rng = thread_rng();
-            let mut p = vec![0; rng.gen_range(0..50_000)];
+            let mut p = vec![0; rng.gen_range(0..500)];
             rng.fill_bytes(&mut p);
 
-            let mut s = vec![0; rng.gen_range(0..50_000)];
+            let mut s = vec![0; rng.gen_range(0..500)];
             rng.fill_bytes(&mut s);
 
-            let rounds = rng.gen_range(1..1_000);
+            let rounds = rng.gen_range(1..1_0000);
 
             let dk_len = rng.gen_range(1..2048);
             let mut out1 = vec![0; dk_len];

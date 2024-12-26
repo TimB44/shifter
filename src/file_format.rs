@@ -1,4 +1,4 @@
-/// This module contains the code the code to create, read and write shifter files  
+/// This module contains the code to create, read and write shifter files  
 use std::{
     env::temp_dir,
     fs::File,
@@ -27,6 +27,7 @@ const CHACHA_NONCE: [u8; 12] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 // TODO: Find a good number which balances speed and security
 const PBKDF2_ITERATIONS: u32 = 1_000;
 
+#[derive(Debug)]
 pub struct EncryptedShifterFile {
     version_number: u8,
     hmac_tag: U256,
@@ -35,6 +36,7 @@ pub struct EncryptedShifterFile {
     file: File,
 }
 
+#[derive(Debug)]
 pub struct DecryptedShifterFile {
     pub filename: String,
     pub contents: File,
@@ -83,6 +85,7 @@ pub enum ShifterFileDecryptError {
 
 impl EncryptedShifterFile {
     pub fn load_from_file(mut file: File) -> Result<EncryptedShifterFile, ShifterFileParseError> {
+        file.rewind()?;
         let mut magic_number = [0; SHIFTER_FILE_MAGIC_NUMBER.len()];
         file.read_exact(&mut magic_number)?;
         if magic_number != *SHIFTER_FILE_MAGIC_NUMBER {
@@ -166,10 +169,7 @@ impl EncryptedShifterFile {
             },
         );
 
-        self.file.seek(SeekFrom::Start(CIPHERTEXT_OFFSET))?;
-
-        let mut ciphertext = Vec::new();
-        self.file.read_to_end(&mut ciphertext)?;
+        let mut ciphertext = self.chiphertext()?;
         let tag = hmac_sha256(&hmac_dk, &mut ciphertext);
         if self.hmac_tag != tag {
             return Err(ShifterFileDecryptError::HmacTagIncorrect {
@@ -227,6 +227,13 @@ impl EncryptedShifterFile {
     pub fn chacha_salt(&self) -> U256 {
         self.chacha_key_salt
     }
+
+    pub fn chiphertext(&mut self) -> Result<Vec<u8>, io::Error> {
+        let mut out = Vec::new();
+        self.file.seek(SeekFrom::Start(CIPHERTEXT_OFFSET))?;
+        self.file.read_to_end(&mut out)?;
+        Ok(out)
+    }
 }
 
 impl DecryptedShifterFile {
@@ -269,5 +276,168 @@ impl DecryptedShifterFile {
             &ciphertext,
             out,
         )
+    }
+}
+
+#[cfg(test)]
+mod file_format_tests {
+    use std::{
+        env::temp_dir,
+        fs::{self, File},
+        io::Write,
+        path::PathBuf,
+    };
+
+    use rand::{thread_rng, Rng, RngCore};
+
+    use crate::file_format::ShifterFileParseError;
+
+    use super::{EncryptedShifterFile, CIPHERTEXT_OFFSET};
+    const GENERIC_ENCRYPTED_FILE_HEADER: [u8; CIPHERTEXT_OFFSET as usize] = [
+        83, 72, 70, 84, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+        21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
+        44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66,
+        67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+        90, 91, 92, 93, 94, 95, 96,
+    ];
+
+    fn generate_random_path() -> PathBuf {
+        temp_dir()
+            .join(rand::thread_rng().next_u64().to_string())
+            .with_extension(".shifted")
+    }
+
+    #[test]
+    fn load_from_file_incorrect_magic_number() {
+        let mut data = GENERIC_ENCRYPTED_FILE_HEADER.to_vec();
+        let incorrect_magic_number = b"SHFF".clone();
+        data[0..4].copy_from_slice(&incorrect_magic_number);
+        data.extend_from_slice(b"THIS IS THE BODY");
+
+        let path = generate_random_path();
+        fs::write(path.clone(), &data).unwrap();
+
+        let file = File::open(path).unwrap();
+        assert!(match EncryptedShifterFile::load_from_file(file) {
+            Err(ShifterFileParseError::IncorrectMagicNumber {
+                actual_magic_number: mn,
+            }) if mn == incorrect_magic_number => true,
+            _ => false,
+        });
+    }
+
+    #[test]
+    fn load_from_file_too_short() {
+        let mut data = GENERIC_ENCRYPTED_FILE_HEADER.to_vec();
+        data.truncate(30);
+
+        let path = generate_random_path();
+        let mut file = File::create_new(path).unwrap();
+        file.write_all(&data).unwrap();
+
+        assert!(matches!(
+            EncryptedShifterFile::load_from_file(file),
+            Err(ShifterFileParseError::ReadError(_))
+        ));
+    }
+
+    #[test]
+    fn load_from_file_wrong_version_number() {
+        for version in [0, 2, 255] {
+            let mut data = GENERIC_ENCRYPTED_FILE_HEADER.to_vec();
+            data.extend_from_slice(b"THIS IS THE BODY");
+            data[4] = version;
+
+            let path = generate_random_path();
+            let mut file = File::create_new(path).unwrap();
+            file.write_all(&data).unwrap();
+
+            assert!(match EncryptedShifterFile::load_from_file(file) {
+                Err(ShifterFileParseError::IncorrectVersionNumber { actual_verion: v })
+                    if v == version =>
+                    true,
+                _ => false,
+            });
+        }
+    }
+
+    #[test]
+    fn load_from_file_correct() {
+        let mut data = GENERIC_ENCRYPTED_FILE_HEADER.to_vec();
+        data.extend_from_slice(b"THIS IS THE BODY");
+
+        let path = generate_random_path();
+        let mut file = File::create_new(path).unwrap();
+        file.write_all(&data).unwrap();
+
+        let mut result = EncryptedShifterFile::load_from_file(file).unwrap();
+
+        assert_eq!(result.version_number, 1);
+        assert_eq!(&(result.hmac_tag), (1..=32).collect::<Vec<u8>>().as_slice());
+        assert_eq!(
+            &(result.hmac_key_salt),
+            (33..=64).collect::<Vec<u8>>().as_slice()
+        );
+        assert_eq!(
+            &(result.chacha_key_salt),
+            (65..=96).collect::<Vec<u8>>().as_slice()
+        );
+        assert_eq!(result.chiphertext().unwrap(), b"THIS IS THE BODY");
+    }
+
+    #[test]
+    fn load_from_file_empty_body_works() {
+        let data = GENERIC_ENCRYPTED_FILE_HEADER.to_vec();
+
+        let path = generate_random_path();
+        let mut file = File::create_new(path).unwrap();
+        file.write_all(&data).unwrap();
+
+        let mut result = EncryptedShifterFile::load_from_file(file).unwrap();
+
+        assert_eq!(result.version_number, 1);
+        assert_eq!(&(result.hmac_tag), (1..=32).collect::<Vec<u8>>().as_slice());
+        assert_eq!(
+            &(result.hmac_key_salt),
+            (33..=64).collect::<Vec<u8>>().as_slice()
+        );
+        assert_eq!(
+            &(result.chacha_key_salt),
+            (65..=96).collect::<Vec<u8>>().as_slice()
+        );
+        assert_eq!(result.chiphertext().unwrap(), b"");
+    }
+
+    #[test]
+    fn load_from_file_random() {
+        let mut rand = thread_rng();
+        for _ in 0..100 {
+            let mut data = GENERIC_ENCRYPTED_FILE_HEADER.to_vec();
+            let mut hmac_tag = [0; 32];
+            let mut hmac_key_salt = [0; 32];
+            let mut chacha_key_salt = [0; 32];
+            rand.fill_bytes(&mut hmac_tag);
+            rand.fill_bytes(&mut hmac_key_salt);
+            rand.fill_bytes(&mut chacha_key_salt);
+            data[5..37].copy_from_slice(&hmac_tag);
+            data[37..69].copy_from_slice(&hmac_key_salt);
+            data[69..101].copy_from_slice(&chacha_key_salt);
+            let body_len = rand.gen_range(0..500_000);
+            let mut body = vec![0; body_len];
+
+            rand.fill_bytes(&mut body);
+            data.extend_from_slice(&body);
+
+            let mut file = File::create_new(generate_random_path()).unwrap();
+            file.write_all(&data).unwrap();
+
+            let mut result = EncryptedShifterFile::load_from_file(file).unwrap();
+
+            assert_eq!(result.version_number, 1);
+            assert_eq!(result.hmac_tag, hmac_tag);
+            assert_eq!(result.hmac_key_salt, hmac_key_salt);
+            assert_eq!(result.chacha_key_salt, chacha_key_salt);
+            assert_eq!(result.chiphertext().unwrap(), body);
+        }
     }
 }
