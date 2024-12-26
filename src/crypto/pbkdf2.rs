@@ -1,26 +1,25 @@
 use crate::crypto::{hmac::hmac_sha256, utils::slice_xor_assign};
 
 /// Reference from https://www.ietf.org/rfc/rfc2898.txt
-
+use rayon::prelude::*;
 const H_LEN: u32 = crate::crypto::sha256::SHA_256_OUTPUT_SIZE_BITS / 8;
 pub fn pbkdf2(password: &[u8], salt: &[u8], rounds: u32, out: &mut [u8]) {
     assert!(rounds > 0);
     let dk_len: u32 = out.len().try_into().expect("derived key too long");
     let l = dk_len.div_ceil(H_LEN);
     let r = dk_len % H_LEN;
-    let mut blocks = out.chunks_exact_mut(H_LEN as usize);
+    let mut blocks = out.par_chunks_exact_mut(H_LEN as usize);
 
-    let mut block_num = 1;
-    while let Some(block) = blocks.next() {
-        block.copy_from_slice(&generate_block(password, salt, rounds, block_num as u32));
-        block_num += 1;
-    }
-
-    let rem = blocks.into_remainder();
+    let rem = blocks.remainder();
     debug_assert!(rem.len() == r as usize);
+
     if !rem.is_empty() {
         rem.copy_from_slice(&generate_block(password, salt, rounds, l)[0..(r as usize)]);
     }
+
+    blocks.enumerate().for_each(|(i, block)| {
+        block.copy_from_slice(&generate_block(password, salt, rounds, i as u32 + 1));
+    });
 }
 
 fn generate_block(
