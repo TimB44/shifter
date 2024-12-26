@@ -188,8 +188,8 @@ impl EncryptedShifterFile {
             .ok_or(ShifterFileDecryptError::NoNullByte)?;
 
         let mut file_contents =
-            File::open(temp_dir().join(rand::thread_rng().next_u64().to_string()))?;
-        file_contents.write_all(&plaintext[split..])?;
+            File::create_new(temp_dir().join(rand::thread_rng().next_u64().to_string()))?;
+        file_contents.write_all(&plaintext[(split + 1)..])?;
 
         let filename = match String::from_utf8(plaintext[0..split].to_vec()) {
             Ok(filename) => filename,
@@ -283,16 +283,16 @@ impl DecryptedShifterFile {
 mod file_format_tests {
     use std::{
         env::temp_dir,
-        fs::{self, File},
-        io::Write,
+        fs::{self, remove_file, File},
+        io::{Read, Seek, Write},
         path::PathBuf,
     };
 
-    use rand::{thread_rng, Rng, RngCore};
+    use rand::{distributions::Alphanumeric, thread_rng, Rng, RngCore};
 
     use crate::file_format::ShifterFileParseError;
 
-    use super::{EncryptedShifterFile, CIPHERTEXT_OFFSET};
+    use super::{DecryptedShifterFile, EncryptedShifterFile, CIPHERTEXT_OFFSET};
     const GENERIC_ENCRYPTED_FILE_HEADER: [u8; CIPHERTEXT_OFFSET as usize] = [
         83, 72, 70, 84, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
         21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
@@ -301,7 +301,7 @@ mod file_format_tests {
         90, 91, 92, 93, 94, 95, 96,
     ];
 
-    fn generate_random_path() -> PathBuf {
+    fn generate_random_tempfile_path() -> PathBuf {
         temp_dir()
             .join(rand::thread_rng().next_u64().to_string())
             .with_extension(".shifted")
@@ -314,16 +314,18 @@ mod file_format_tests {
         data[0..4].copy_from_slice(&incorrect_magic_number);
         data.extend_from_slice(b"THIS IS THE BODY");
 
-        let path = generate_random_path();
-        fs::write(path.clone(), &data).unwrap();
+        let path = generate_random_tempfile_path();
+        let mut file = File::create_new(path.clone()).unwrap();
+        file.write_all(&data).unwrap();
+        fs::write(path.clone(), &data.clone()).unwrap();
 
-        let file = File::open(path).unwrap();
         assert!(match EncryptedShifterFile::load_from_file(file) {
             Err(ShifterFileParseError::IncorrectMagicNumber {
                 actual_magic_number: mn,
             }) if mn == incorrect_magic_number => true,
             _ => false,
         });
+        remove_file(path).unwrap();
     }
 
     #[test]
@@ -331,14 +333,15 @@ mod file_format_tests {
         let mut data = GENERIC_ENCRYPTED_FILE_HEADER.to_vec();
         data.truncate(30);
 
-        let path = generate_random_path();
-        let mut file = File::create_new(path).unwrap();
+        let path = generate_random_tempfile_path();
+        let mut file = File::create_new(path.clone()).unwrap();
         file.write_all(&data).unwrap();
 
         assert!(matches!(
             EncryptedShifterFile::load_from_file(file),
             Err(ShifterFileParseError::ReadError(_))
         ));
+        remove_file(path).unwrap();
     }
 
     #[test]
@@ -348,8 +351,8 @@ mod file_format_tests {
             data.extend_from_slice(b"THIS IS THE BODY");
             data[4] = version;
 
-            let path = generate_random_path();
-            let mut file = File::create_new(path).unwrap();
+            let path = generate_random_tempfile_path();
+            let mut file = File::create_new(path.clone()).unwrap();
             file.write_all(&data).unwrap();
 
             assert!(match EncryptedShifterFile::load_from_file(file) {
@@ -358,6 +361,7 @@ mod file_format_tests {
                     true,
                 _ => false,
             });
+            remove_file(path).unwrap();
         }
     }
 
@@ -366,8 +370,8 @@ mod file_format_tests {
         let mut data = GENERIC_ENCRYPTED_FILE_HEADER.to_vec();
         data.extend_from_slice(b"THIS IS THE BODY");
 
-        let path = generate_random_path();
-        let mut file = File::create_new(path).unwrap();
+        let path = generate_random_tempfile_path();
+        let mut file = File::create_new(path.clone()).unwrap();
         file.write_all(&data).unwrap();
 
         let mut result = EncryptedShifterFile::load_from_file(file).unwrap();
@@ -383,14 +387,15 @@ mod file_format_tests {
             (65..=96).collect::<Vec<u8>>().as_slice()
         );
         assert_eq!(result.chiphertext().unwrap(), b"THIS IS THE BODY");
+        remove_file(path).unwrap();
     }
 
     #[test]
     fn load_from_file_empty_body_works() {
         let data = GENERIC_ENCRYPTED_FILE_HEADER.to_vec();
 
-        let path = generate_random_path();
-        let mut file = File::create_new(path).unwrap();
+        let path = generate_random_tempfile_path();
+        let mut file = File::create_new(path.clone()).unwrap();
         file.write_all(&data).unwrap();
 
         let mut result = EncryptedShifterFile::load_from_file(file).unwrap();
@@ -406,6 +411,7 @@ mod file_format_tests {
             (65..=96).collect::<Vec<u8>>().as_slice()
         );
         assert_eq!(result.chiphertext().unwrap(), b"");
+        remove_file(path).unwrap();
     }
 
     #[test]
@@ -428,7 +434,8 @@ mod file_format_tests {
             rand.fill_bytes(&mut body);
             data.extend_from_slice(&body);
 
-            let mut file = File::create_new(generate_random_path()).unwrap();
+            let file_name = generate_random_tempfile_path();
+            let mut file = File::create_new(file_name.clone()).unwrap();
             file.write_all(&data).unwrap();
 
             let mut result = EncryptedShifterFile::load_from_file(file).unwrap();
@@ -438,6 +445,51 @@ mod file_format_tests {
             assert_eq!(result.hmac_key_salt, hmac_key_salt);
             assert_eq!(result.chacha_key_salt, chacha_key_salt);
             assert_eq!(result.chiphertext().unwrap(), body);
+            remove_file(file_name).unwrap();
         }
+    }
+
+    use rayon::prelude::*;
+    #[test]
+    fn encrypt_decrpyt_file_fuzz() {
+        (0..500).into_par_iter().for_each(|_| {
+            let mut rand = thread_rng();
+            let body_len = rand.gen_range(0..100_000);
+            let mut data = vec![0; body_len];
+            rand.fill_bytes(&mut data);
+            let data = data;
+            let contents_name = generate_random_tempfile_path();
+            let mut contents = File::create_new(contents_name.clone()).unwrap();
+            contents.write_all(&data).unwrap();
+
+            let password_len = rand.gen_range(0..2_000);
+            let mut password = vec![0; password_len];
+            rand.fill_bytes(&mut password);
+            let filename: String = rand
+                .clone()
+                .sample_iter(&Alphanumeric)
+                .take(rand.gen_range(1..256))
+                .map(|c| c as char)
+                .collect();
+
+            let out_name = generate_random_tempfile_path();
+            let out = File::create_new(out_name.clone()).unwrap();
+
+            let dsf = DecryptedShifterFile {
+                filename: filename.clone(),
+                contents,
+            };
+            let mut esf = dsf.encrypt(&password, out).unwrap();
+            let mut result = esf.decrypt(&password).unwrap();
+            assert_eq!(result.filename, filename);
+            result.contents.rewind().unwrap();
+            let mut data_after = Vec::new();
+            result.contents.read_to_end(&mut data_after).unwrap();
+            assert_eq!(data_after, data);
+
+            // Clean up files from test
+            remove_file(contents_name).unwrap();
+            remove_file(out_name).unwrap();
+        });
     }
 }

@@ -108,7 +108,7 @@ mod pbkdf2_tests {
             let mut s = vec![0; rng.gen_range(0..500)];
             rng.fill_bytes(&mut s);
 
-            let rounds = rng.gen_range(1..1_0000);
+            let rounds = rng.gen_range(1..10_000);
 
             let dk_len = rng.gen_range(1..2048);
             let mut out1 = vec![0; dk_len];
