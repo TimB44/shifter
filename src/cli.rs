@@ -12,6 +12,7 @@ pub struct ShifterArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum Mode {
+    #[clap(visible_alias("e"))]
     Encrypt {
         #[arg(short, long)]
         file: String,
@@ -23,6 +24,7 @@ pub enum Mode {
         outfile: Option<String>,
     },
 
+    #[clap(visible_alias("d"))]
     Decrypt {
         #[arg(short, long)]
         file: String,
@@ -35,11 +37,11 @@ pub enum Mode {
 #[derive(Debug, clap::Args)]
 #[group(required = true, multiple = false)]
 pub struct Password {
-    /// Give password directly as argument  
-    #[clap(short, long)]
+    /// Load password from file
+    #[clap(long)]
     password_file: Option<String>,
 
-    /// Load password from file
+    /// Give password directly as argument  
     #[clap(short, long)]
     password: Option<String>,
 }
