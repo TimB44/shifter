@@ -52,7 +52,7 @@ fn decrypt(filename: String, password: &[u8]) {
 
     println!("Decrypting");
     let temp_name = generate_decrypted_filename();
-    let out = File::open(generate_decrypted_filename()).unwrap_or_else(|err| {
+    let out = File::create(&temp_name).unwrap_or_else(|err| {
         eprintln!("Could not open output file");
         eprintln!("Error: {err:?}");
         exit(1);
@@ -118,8 +118,8 @@ fn encrypt(filename: String, password: &[u8], output_filename: Option<String>) {
     let df = DecryptedShifterFile { filename, contents };
 
     let out_name = output_filename.unwrap_or_else(generate_encrypted_filename);
-    let out = File::open(generate_decrypted_filename()).unwrap_or_else(|err| {
-        eprintln!("Could not open output file");
+    let out = File::create(&out_name).unwrap_or_else(|err| {
+        eprintln!("Could not create output file");
         eprintln!("Error: {err:?}");
         exit(1);
     });
