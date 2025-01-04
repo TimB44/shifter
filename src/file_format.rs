@@ -61,9 +61,8 @@ pub enum ShifterFileDecryptError {
         calcuated_tag: U256,
     },
 
-    #[error("original filename length {length} outside of valid range [1, {MAX_FILENAME_LENGTH}]")]
+    #[error("original filename length {:?} outside of valid range [1, {MAX_FILENAME_LENGTH}]", filename.len())]
     InvalidFileNameLength {
-        length: usize,
         filename: String,
         file_contents: File,
     },
@@ -78,8 +77,9 @@ pub enum ShifterFileDecryptError {
     #[error("error writing plaintext file")]
     IOError(#[from] io::Error),
 
+    // TODO: possibly remove this and inlcude it in invalid length
     #[error("plaintext missing null byte seperator between filename and content")]
-    NoNullByte,
+    NoNullByte { file_contents: File },
 }
 
 impl EncryptedShifterFile {
@@ -181,14 +181,18 @@ impl EncryptedShifterFile {
         chacha20(&chacha_dk, &CHACHA_NONCE, &mut ciphertext, 0);
         let plaintext = ciphertext;
 
-        // The first null byte is the seperator between the filename and filecontents
-        let split = plaintext
-            .iter()
-            .position(|&b| b == 0)
-            .ok_or(ShifterFileDecryptError::NoNullByte)?;
-
         out.rewind()?;
         out.set_len(0)?;
+
+        // The first null byte is the seperator between the filename and filecontents
+        let split = match plaintext.iter().position(|&b| b == 0) {
+            Some(p) => p,
+            None => {
+                out.write_all(&plaintext)?;
+                return Err(ShifterFileDecryptError::NoNullByte { file_contents: out });
+            }
+        };
+
         out.write_all(&plaintext[(split + 1)..])?;
 
         let filename = match String::from_utf8(plaintext[0..split].to_vec()) {
@@ -203,7 +207,6 @@ impl EncryptedShifterFile {
 
         if split < 1 || split > MAX_FILENAME_LENGTH {
             return Err(ShifterFileDecryptError::InvalidFileNameLength {
-                length: split,
                 filename,
                 file_contents: out,
             });
