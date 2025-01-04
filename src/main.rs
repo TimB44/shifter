@@ -2,7 +2,10 @@ use clap::Parser;
 use rand::RngCore;
 use shifter::{
     cli::{self, ShifterArgs},
-    file_format::{self, EncryptedShifterFile, ShifterFileDecryptError, ShifterFileParseError},
+    file_format::{
+        self, DecryptedShifterFile, EncryptedShifterFile, ShifterFileDecryptError,
+        ShifterFileParseError,
+    },
 };
 use std::{
     fs::{rename, File},
@@ -12,19 +15,23 @@ use std::{
 fn main() {
     let args = ShifterArgs::parse();
     match args.mode {
-        cli::Mode::Encrypt { file, password } => encrypt(file, &Vec::from(password)),
+        cli::Mode::Encrypt {
+            file,
+            password,
+            outfile,
+        } => encrypt(file, &Vec::from(password), outfile),
         cli::Mode::Decrypt { file, password } => decrypt(file, &Vec::from(password)),
     }
 }
 
-fn decrypt(file: String, password: &[u8]) {
-    let encrypted_file = File::open(&file).unwrap_or_else(|err| {
-        eprintln!("Could not open file: {file}");
+fn decrypt(filename: String, password: &[u8]) {
+    let encrypted_file = File::open(&filename).unwrap_or_else(|err| {
+        eprintln!("Could not open file: {filename}");
         eprintln!("Error: {err:?}");
         exit(1);
     });
 
-    println!("Parsing file: {file}");
+    println!("Parsing file: {filename}");
     let mut parsed_file = match EncryptedShifterFile::load_from_file(encrypted_file) {
         Ok(pf) => pf,
         Err(ShifterFileParseError::ReadError(err)) => {
@@ -44,8 +51,8 @@ fn decrypt(file: String, password: &[u8]) {
     };
 
     println!("Decrypting");
-    let temp_name = generate_generic_filename();
-    let out = File::open(generate_generic_filename()).unwrap_or_else(|err| {
+    let temp_name = generate_decrypted_filename();
+    let out = File::open(generate_decrypted_filename()).unwrap_or_else(|err| {
         eprintln!("Could not open output file");
         eprintln!("Error: {err:?}");
         exit(1);
@@ -72,7 +79,10 @@ fn decrypt(file: String, password: &[u8]) {
             exit(1);
         }
 
-        Err(ShifterFileDecryptError::InvalidFilenameUtf8 { err, file_contents }) => {
+        Err(ShifterFileDecryptError::InvalidFilenameUtf8 {
+            err: _,
+            file_contents: _,
+        }) => {
             eprintln!("Error: The filename extracted from the encrypted file is not valid UTF-8. Writing to `{}` instead.", temp_name);
             exit(1);
         }
@@ -99,10 +109,32 @@ fn decrypt(file: String, password: &[u8]) {
     eprintln!("File written to: {filename:?}");
 }
 
-fn encrypt(file: String, password: &[u8]) {
-    todo!()
+fn encrypt(filename: String, password: &[u8], output_filename: Option<String>) {
+    let contents = File::open(&filename).unwrap_or_else(|err| {
+        eprintln!("Could not open file: {filename}");
+        eprintln!("Error: {err:?}");
+        exit(1);
+    });
+    let df = DecryptedShifterFile { filename, contents };
+
+    let out_name = output_filename.unwrap_or_else(generate_encrypted_filename);
+    let out = File::open(generate_decrypted_filename()).unwrap_or_else(|err| {
+        eprintln!("Could not open output file");
+        eprintln!("Error: {err:?}");
+        exit(1);
+    });
+    df.encrypt(password, out).unwrap_or_else(|err| {
+        eprintln!("I/O error occurred: {:?}", err);
+        exit(1);
+    });
+
+    println!("Encrypted file written to: {:?}", out_name)
 }
 
-fn generate_generic_filename() -> String {
+fn generate_decrypted_filename() -> String {
     format!("decrypted-file-{:?}", rand::thread_rng().next_u32())
+}
+
+fn generate_encrypted_filename() -> String {
+    format!("encrypted-{:?}.shifted", rand::thread_rng().next_u32())
 }

@@ -18,6 +18,9 @@ pub enum Mode {
 
         #[clap(flatten)]
         password: Password,
+
+        #[arg(short, long)]
+        outfile: Option<String>,
     },
 
     Decrypt {
