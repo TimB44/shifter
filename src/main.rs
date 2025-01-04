@@ -1,11 +1,12 @@
 use clap::Parser;
 use rand::RngCore;
 use shifter::{
-    cli::{self, ShifterArgs},
+    cli::{Mode, ShifterArgs},
     file_format::{
         self, DecryptedShifterFile, EncryptedShifterFile, ShifterFileDecryptError,
         ShifterFileParseError,
     },
+    passphrase_generator::generate_passphrase,
 };
 use std::{
     fs::{rename, File},
@@ -15,12 +16,23 @@ use std::{
 fn main() {
     let args = ShifterArgs::parse();
     match args.mode {
-        cli::Mode::Encrypt {
+        Mode::Encrypt {
             file,
             password,
             outfile,
-        } => encrypt(file, &Vec::from(password), outfile),
-        cli::Mode::Decrypt { file, password } => decrypt(file, &Vec::from(password)),
+        } => {
+            let password = password.map(Vec::from).unwrap_or_else(|| {
+                let pw = generate_passphrase(None);
+                println!("Generated passphrase: {}", pw);
+                pw.into_bytes()
+            });
+
+            encrypt(file, &password, outfile);
+        }
+
+        Mode::Decrypt { file, password } => {
+            decrypt(file, &Vec::from(password));
+        }
     }
 }
 

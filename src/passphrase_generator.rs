@@ -5,6 +5,7 @@ use rand::Rng;
 const WORD_COUNT: usize = 9_800;
 const WORDS: [&str; WORD_COUNT] = split_words(include_bytes!("../res/words.txt"));
 const PASSPHRASE_GENERATOR_DELIMTER: &str = "-";
+const DEFAULT_PASSPHRASE_LENGTH: usize = 8;
 
 const fn split_words(mut input: &[u8]) -> [&str; WORD_COUNT] {
     let mut words: [&str; WORD_COUNT] = [""; WORD_COUNT];
@@ -18,6 +19,8 @@ const fn split_words(mut input: &[u8]) -> [&str; WORD_COUNT] {
 
         let (word, left_over) = input.split_at(cur_byte);
 
+        // Saftey: Test words_valid_utf8 ensures that words are valid utf8 and ascii. This unsafe block is
+        // used as unwrap is not yet a const fn
         words[cur_word] = unsafe { std::str::from_utf8_unchecked(word) };
         cur_word += 1;
 
@@ -28,7 +31,8 @@ const fn split_words(mut input: &[u8]) -> [&str; WORD_COUNT] {
 }
 
 /// Generates a random passphrase with length number of words joined by a hypen
-pub fn generate_passphrase(length: usize) -> String {
+pub fn generate_passphrase(length: Option<usize>) -> String {
+    let length = length.unwrap_or(DEFAULT_PASSPHRASE_LENGTH);
     let mut rand = rand::thread_rng();
     (0..length)
         .flat_map(|cur| {
@@ -68,7 +72,7 @@ mod passphrase_generator_tests {
     #[test]
     fn fuzz() {
         for length in 1..800 {
-            let pf = generate_passphrase(length);
+            let pf = generate_passphrase(Some(length));
 
             // should have eactlye length - 1 hyphens
             assert_eq!(

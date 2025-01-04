@@ -14,11 +14,11 @@ pub struct ShifterArgs {
 pub enum Mode {
     #[clap(visible_alias("e"))]
     Encrypt {
-        #[arg(short, long)]
+        #[arg(required = true)]
         file: String,
 
         #[clap(flatten)]
-        password: Password,
+        password: Option<Password>,
 
         #[arg(short, long)]
         outfile: Option<String>,
@@ -26,7 +26,7 @@ pub enum Mode {
 
     #[clap(visible_alias("d"))]
     Decrypt {
-        #[arg(short, long)]
+        #[arg(required = true)]
         file: String,
 
         #[clap(flatten)]
