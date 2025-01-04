@@ -7,6 +7,7 @@ edition = "2021"
 rand = "0.8.5"
 thiserror = "2.0.9"
 rayon = "1.10.0"
+clap = { version = "4.5.23", features = ["derive"] }
 
 # Used for differential fuzz testing
 [dev-dependencies]

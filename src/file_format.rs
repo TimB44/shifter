@@ -1,6 +1,5 @@
 /// This module contains the code to create, read and write shifter files  
 use std::{
-    env::temp_dir,
     fs::File,
     io::{self, Read, Seek, SeekFrom, Write},
     string::FromUtf8Error,
@@ -154,6 +153,7 @@ impl EncryptedShifterFile {
     pub fn decrypt(
         &mut self,
         password: &[u8],
+        mut out: File,
     ) -> Result<DecryptedShifterFile, ShifterFileDecryptError> {
         // Compute both derived keys in parallel
         let (hmac_dk, chacha_dk) = rayon::join(
@@ -187,14 +187,17 @@ impl EncryptedShifterFile {
             .position(|&b| b == 0)
             .ok_or(ShifterFileDecryptError::NoNullByte)?;
 
-        let mut file_contents =
-            File::create_new(temp_dir().join(rand::thread_rng().next_u64().to_string()))?;
-        file_contents.write_all(&plaintext[(split + 1)..])?;
+        out.rewind()?;
+        out.set_len(0)?;
+        out.write_all(&plaintext[(split + 1)..])?;
 
         let filename = match String::from_utf8(plaintext[0..split].to_vec()) {
             Ok(filename) => filename,
             Err(err) => {
-                return Err(ShifterFileDecryptError::InvalidFilenameUtf8 { err, file_contents })
+                return Err(ShifterFileDecryptError::InvalidFilenameUtf8 {
+                    err,
+                    file_contents: out,
+                })
             }
         };
 
@@ -202,13 +205,13 @@ impl EncryptedShifterFile {
             return Err(ShifterFileDecryptError::InvalidFileNameLength {
                 length: split,
                 filename,
-                file_contents,
+                file_contents: out,
             });
         }
 
         return Ok(DecryptedShifterFile {
             filename,
-            contents: file_contents,
+            contents: out,
         });
     }
 
@@ -459,7 +462,7 @@ mod file_format_tests {
             rand.fill_bytes(&mut data);
             let data = data;
             let contents_name = generate_random_tempfile_path();
-            let mut contents = File::create_new(contents_name.clone()).unwrap();
+            let mut contents = File::create_new(&contents_name).unwrap();
             contents.write_all(&data).unwrap();
 
             let password_len = rand.gen_range(0..2_000);
@@ -473,16 +476,20 @@ mod file_format_tests {
                 .collect();
 
             let out_name = generate_random_tempfile_path();
-            let out = File::create_new(out_name.clone()).unwrap();
+            let out = File::create_new(&out_name).unwrap();
 
             let dsf = DecryptedShifterFile {
                 filename: filename.clone(),
                 contents,
             };
+
+            let decrypted_name = generate_random_tempfile_path();
+            let decrypted = File::create_new(&decrypted_name).unwrap();
             let mut esf = dsf.encrypt(&password, out).unwrap();
-            let mut result = esf.decrypt(&password).unwrap();
+            let mut result = esf.decrypt(&password, decrypted).unwrap();
             assert_eq!(result.filename, filename);
             result.contents.rewind().unwrap();
+
             let mut data_after = Vec::new();
             result.contents.read_to_end(&mut data_after).unwrap();
             assert_eq!(data_after, data);
@@ -490,6 +497,7 @@ mod file_format_tests {
             // Clean up files from test
             remove_file(contents_name).unwrap();
             remove_file(out_name).unwrap();
+            remove_file(decrypted_name).unwrap();
         });
     }
 }
