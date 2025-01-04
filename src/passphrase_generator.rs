@@ -3,7 +3,7 @@ use core::str;
 use rand::Rng;
 
 const WORD_COUNT: usize = 9_800;
-const WORDS: [&'static str; WORD_COUNT] = split_words(include_bytes!("../res/words.txt"));
+const WORDS: [&str; WORD_COUNT] = split_words(include_bytes!("../res/words.txt"));
 const PASSPHRASE_GENERATOR_DELIMTER: &str = "-";
 
 const fn split_words(mut input: &[u8]) -> [&str; WORD_COUNT] {
@@ -12,7 +12,7 @@ const fn split_words(mut input: &[u8]) -> [&str; WORD_COUNT] {
 
     while cur_word < WORD_COUNT {
         let mut cur_byte = 0;
-        while input[cur_byte] != '\n' as u8 {
+        while input[cur_byte] != b'\n' {
             cur_byte += 1;
         }
 
@@ -31,8 +31,7 @@ const fn split_words(mut input: &[u8]) -> [&str; WORD_COUNT] {
 pub fn generate_passphrase(length: usize) -> String {
     let mut rand = rand::thread_rng();
     (0..length)
-        .into_iter()
-        .map(|cur| {
+        .flat_map(|cur| {
             if cur == length - 1 {
                 [WORDS[rand.gen_range(0..WORD_COUNT)], ""]
             } else {
@@ -42,7 +41,6 @@ pub fn generate_passphrase(length: usize) -> String {
                 ]
             }
         })
-        .flatten()
         .collect()
 }
 

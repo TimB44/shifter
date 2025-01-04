@@ -13,7 +13,7 @@ pub fn chacha20(key: &[u8; 32], nonce: &[u8; 12], text: &mut [u8], initial_count
     let mut iter = text.chunks_exact_mut(CHA_CHA_STATE_BYTE_SIZE);
 
     let mut block_counter = initial_counter;
-    while let Some(block) = iter.next() {
+    for block in iter.by_ref() {
         slice_xor_assign(
             block,
             &serialize_state(&gernerate_block(state, block_counter)),

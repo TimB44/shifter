@@ -170,7 +170,7 @@ impl EncryptedShifterFile {
         );
 
         let mut ciphertext = self.chiphertext()?;
-        let tag = hmac_sha256(&hmac_dk, &mut ciphertext);
+        let tag = hmac_sha256(&hmac_dk, &ciphertext);
         if self.hmac_tag != tag {
             return Err(ShifterFileDecryptError::HmacTagIncorrect {
                 expected_tag: self.hmac_tag,
@@ -205,17 +205,17 @@ impl EncryptedShifterFile {
             }
         };
 
-        if split < 1 || split > MAX_FILENAME_LENGTH {
+        if !(1..=MAX_FILENAME_LENGTH).contains(&split) {
             return Err(ShifterFileDecryptError::InvalidFileNameLength {
                 filename,
                 file_contents: out,
             });
         }
 
-        return Ok(DecryptedShifterFile {
+        Ok(DecryptedShifterFile {
             filename,
             contents: out,
-        });
+        })
     }
 
     pub fn version_number(&self) -> u8 {
@@ -316,14 +316,14 @@ mod file_format_tests {
     #[test]
     fn load_from_file_incorrect_magic_number() {
         let mut data = GENERIC_ENCRYPTED_FILE_HEADER.to_vec();
-        let incorrect_magic_number = b"SHFF".clone();
+        let incorrect_magic_number = *b"SHFF";
         data[0..4].copy_from_slice(&incorrect_magic_number);
         data.extend_from_slice(b"THIS IS THE BODY");
 
         let path = generate_random_tempfile_path();
         let mut file = File::create_new(path.clone()).unwrap();
         file.write_all(&data).unwrap();
-        fs::write(path.clone(), &data.clone()).unwrap();
+        fs::write(path.clone(), data.clone()).unwrap();
 
         assert!(match EncryptedShifterFile::load_from_file(file) {
             Err(ShifterFileParseError::IncorrectMagicNumber {
