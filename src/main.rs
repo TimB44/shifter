@@ -21,7 +21,7 @@ fn main() {
             password,
             outfile,
         } => {
-            let password = password.map(Vec::from).unwrap_or_else(|| {
+            let password = Option::from(password).unwrap_or_else(|| {
                 let pw = generate_passphrase(None);
                 println!("Generated passphrase: {}", pw);
                 pw.into_bytes()

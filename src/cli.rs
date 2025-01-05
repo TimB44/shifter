@@ -18,7 +18,7 @@ pub enum Mode {
         file: String,
 
         #[clap(flatten)]
-        password: Option<Password>,
+        password: OptionalPassword,
 
         #[arg(short, long)]
         outfile: Option<String>,
@@ -30,13 +30,13 @@ pub enum Mode {
         file: String,
 
         #[clap(flatten)]
-        password: Password,
+        password: RequiredPassword,
     },
 }
 
-#[derive(Debug, clap::Args)]
+#[derive(Debug, Clone, clap::Args)]
 #[group(required = true, multiple = false)]
-pub struct Password {
+pub struct RequiredPassword {
     /// Load password from file
     #[clap(long)]
     password_file: Option<String>,
@@ -46,8 +46,8 @@ pub struct Password {
     password: Option<String>,
 }
 
-impl From<Password> for Vec<u8> {
-    fn from(value: Password) -> Self {
+impl From<RequiredPassword> for Vec<u8> {
+    fn from(value: RequiredPassword) -> Self {
         match (value.password, value.password_file) {
             (Some(password), None) => password.into_bytes(),
 
@@ -57,6 +57,33 @@ impl From<Password> for Vec<u8> {
             }),
 
             (None, None) | (Some(_), Some(_)) => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, clap::Args)]
+#[group(multiple = false)]
+pub struct OptionalPassword {
+    /// Load password from file
+    #[clap(long)]
+    password_file: Option<String>,
+
+    /// Give password directly as argument  
+    #[clap(short, long)]
+    password: Option<String>,
+}
+
+impl From<OptionalPassword> for Option<Vec<u8>> {
+    fn from(value: OptionalPassword) -> Self {
+        match (value.password, value.password_file) {
+            (Some(password), None) => Some(password.into_bytes()),
+
+            (None, Some(password_file)) => Some(read(&password_file).unwrap_or_else(|_| {
+                eprintln!("Failed to load password file: {:?}", password_file);
+                exit(1);
+            })),
+            (None, None) => None,
+            (Some(_), Some(_)) => unreachable!(),
         }
     }
 }
