@@ -21,8 +21,9 @@ fn main() {
             password,
             outfile,
         } => {
+            let passphrase_len = password.lengh();
             let password = Option::from(password).unwrap_or_else(|| {
-                let pw = generate_passphrase(None);
+                let pw = generate_passphrase(passphrase_len);
                 println!("Generated passphrase: {}", pw);
                 pw.into_bytes()
             });

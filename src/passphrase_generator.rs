@@ -70,6 +70,11 @@ mod passphrase_generator_tests {
     }
 
     #[test]
+    fn zero_length_empty() {
+        assert_eq!("", generate_passphrase(Some(0)))
+    }
+
+    #[test]
     fn fuzz() {
         for length in 1..800 {
             let pf = generate_passphrase(Some(length));

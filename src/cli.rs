@@ -1,4 +1,4 @@
-use std::{fs::read, process::exit};
+use std::{fs::read, process::exit, usize};
 
 use clap::{Parser, Subcommand};
 
@@ -71,6 +71,16 @@ pub struct OptionalPassword {
     /// Give password directly as argument  
     #[clap(short, long)]
     password: Option<String>,
+
+    /// Desired length of generated passphrase in words
+    #[clap(short, long)]
+    lengh: Option<usize>,
+}
+
+impl OptionalPassword {
+    pub fn lengh(&self) -> Option<usize> {
+        self.lengh
+    }
 }
 
 impl From<OptionalPassword> for Option<Vec<u8>> {
