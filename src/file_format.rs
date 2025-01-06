@@ -244,7 +244,7 @@ impl EncryptedShifterFile {
 
 impl DecryptedShifterFile {
     pub fn encrypt(
-        mut self,
+        &mut self,
         password: &[u8],
         out: File,
     ) -> Result<EncryptedShifterFile, io::Error> {
@@ -481,7 +481,7 @@ mod file_format_tests {
             let out_name = generate_random_tempfile_path();
             let out = File::create_new(&out_name).unwrap();
 
-            let dsf = DecryptedShifterFile {
+            let mut dsf = DecryptedShifterFile {
                 filename: filename.clone(),
                 contents,
             };

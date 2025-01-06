@@ -9,7 +9,8 @@ use shifter::{
     passphrase_generator::generate_passphrase,
 };
 use std::{
-    fs::{rename, File},
+    fs::{remove_file, rename, File, OpenOptions},
+    io::{self, Write},
     process::exit,
 };
 
@@ -20,6 +21,7 @@ fn main() {
             file,
             password,
             outfile,
+            delete,
         } => {
             let passphrase_len = password.lengh();
             let password = Option::from(password).unwrap_or_else(|| {
@@ -28,11 +30,31 @@ fn main() {
                 pw.into_bytes()
             });
 
-            encrypt(file, &password, outfile);
+            encrypt(file.clone(), &password, outfile);
+
+            if delete {
+                wipe_file(&file).unwrap_or_else(|err| {
+                    eprintln!("Failed to delete: {file}");
+                    eprintln!("Error: {err}");
+                    exit(1);
+                });
+            }
         }
 
-        Mode::Decrypt { file, password } => {
-            decrypt(file, &Vec::from(password));
+        Mode::Decrypt {
+            file,
+            password,
+            delete,
+        } => {
+            decrypt(file.clone(), &Vec::from(password));
+
+            if delete {
+                wipe_file(&file).unwrap_or_else(|err| {
+                    eprintln!("Failed to delete: {file}");
+                    eprintln!("Error: {err}");
+                    exit(1);
+                });
+            }
         }
     }
 }
@@ -81,6 +103,7 @@ fn decrypt(filename: String, password: &[u8]) {
             calcuated_tag: _,
         }) => {
             eprintln!("Error: File tag mismatch. This is likely due to an incorrect password or a corrupted file.");
+            remove_file(temp_name).expect("Could not remove temp file");
             exit(1);
         }
 
@@ -102,6 +125,7 @@ fn decrypt(filename: String, password: &[u8]) {
 
         Err(ShifterFileDecryptError::IOError(err)) => {
             eprintln!("I/O error occurred: {:?}", err);
+            remove_file(temp_name).expect("Could not remove temp file");
             exit(1);
         }
         Err(ShifterFileDecryptError::NoNullByte { file_contents: _ }) => {
@@ -128,7 +152,7 @@ fn encrypt(filename: String, password: &[u8], output_filename: Option<String>) {
         eprintln!("Error: {err:?}");
         exit(1);
     });
-    let df = DecryptedShifterFile { filename, contents };
+    let mut df = DecryptedShifterFile { filename, contents };
 
     let out_name = output_filename.unwrap_or_else(generate_encrypted_filename);
     let out = File::create(&out_name).unwrap_or_else(|err| {
@@ -150,4 +174,20 @@ fn generate_decrypted_filename() -> String {
 
 fn generate_encrypted_filename() -> String {
     format!("encrypted-{:?}.shifted", rand::thread_rng().next_u32())
+}
+
+fn wipe_file(filename: &str) -> io::Result<()> {
+    let mut file = OpenOptions::new().write(true).read(true).open(&filename)?;
+    let bytes_left = file.metadata()?.len();
+    let buf = [0; 1024];
+    while bytes_left >= 1024 {
+        file.write_all(&buf)?;
+    }
+
+    file.write_all(&buf[..bytes_left as usize])?;
+    file.sync_all()?;
+    drop(file);
+    remove_file(filename)?;
+
+    Ok(())
 }

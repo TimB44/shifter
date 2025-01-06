@@ -14,14 +14,20 @@ pub struct ShifterArgs {
 pub enum Mode {
     #[clap(visible_alias("e"))]
     Encrypt {
+        // The file to be encrypted
         #[arg(required = true)]
         file: String,
 
         #[clap(flatten)]
         password: OptionalPassword,
 
+        // Name of the encrypted file
         #[arg(short, long)]
         outfile: Option<String>,
+
+        /// Delete the given file after encryption
+        #[arg(short, long)]
+        delete: bool,
     },
 
     #[clap(visible_alias("d"))]
@@ -31,6 +37,10 @@ pub enum Mode {
 
         #[clap(flatten)]
         password: RequiredPassword,
+
+        /// Delete the encrypted file after decryption
+        #[arg(short, long)]
+        delete: bool,
     },
 }
 
