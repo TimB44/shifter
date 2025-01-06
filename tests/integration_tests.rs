@@ -1,7 +1,7 @@
 use assert_cmd::Command;
 use std::{
     env::set_current_dir,
-    fs::{remove_file, write},
+    fs::{exists, remove_file, write},
 };
 
 const TMPDIR: &str = env!("CARGO_TARGET_TMPDIR");
@@ -198,4 +198,37 @@ fn generated_passphrase_length() {
         remove_file("out.shifted").unwrap();
         remove_file("info.md").unwrap();
     }
+}
+
+#[test]
+fn delete_flag() {
+    set_current_dir(TMPDIR).unwrap();
+
+    let file_contents = b"this is the content, 123";
+    write("del.txt", file_contents).unwrap();
+    let mut encrypt_command = Command::cargo_bin("shifter").unwrap();
+    encrypt_command.args([
+        "encrypt",
+        "del.txt",
+        "--password",
+        "TESTPW",
+        "--outfile",
+        "del.shifted",
+        "--delete",
+    ]);
+
+    encrypt_command.assert().success();
+
+    assert!(!exists("del.txt").unwrap());
+    let mut decrypt_command = Command::cargo_bin("shifter").unwrap();
+    decrypt_command.args(["decrypt", "del.shifted", "--password", "TESTPW", "-d"]);
+    decrypt_command.assert().success();
+
+    assert_eq!(
+        &file_contents,
+        &std::fs::read("del.txt").unwrap().as_slice()
+    );
+
+    assert!(!exists("del.shifted").unwrap());
+    remove_file("del.txt").unwrap();
 }
