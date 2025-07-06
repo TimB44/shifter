@@ -49,7 +49,7 @@ pub enum ShifterFileParseError {
     #[error("invalid magic number (expected {SHIFTER_FILE_MAGIC_NUMBER:?}) found {actual_magic_number:?}")]
     IncorrectMagicNumber { actual_magic_number: [u8; 4] },
 
-    #[error("invalid version number (expected number in range [{MIN_SUPPORTED_VERSION_NUMBER},{MAX_SUPPORTED_VERSION_NUMBER} ] found {actual_verion:?}")]
+    #[error("invalid version number (expected number in range [{MIN_SUPPORTED_VERSION_NUMBER},{MAX_SUPPORTED_VERSION_NUMBER}] found {actual_verion:?}")]
     IncorrectVersionNumber { actual_verion: u8 },
 }
 

@@ -139,6 +139,7 @@ fn generated_passphrase() {
         let output = assert.get_output();
 
         let output_string = &String::from_utf8_lossy(&output.stdout);
+        dbg!(output_string);
         let pw = &output_string
             .lines()
             .find(|l| l.contains("Generated passphrase:"))

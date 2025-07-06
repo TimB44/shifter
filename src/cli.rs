@@ -2,6 +2,8 @@ use std::{fs::read, process::exit, usize};
 
 use clap::{Parser, Subcommand};
 
+use crate::passphrase_generator::generate_passphrase;
+
 #[derive(Debug, Parser)]
 #[command(name = "shifter")]
 #[command(about,version, long_about = None)]
@@ -42,6 +44,8 @@ pub enum Mode {
         #[arg(short, long)]
         delete: bool,
     },
+    #[clap(visible_alias("i"))]
+    Interactive,
 }
 
 #[derive(Debug, Clone, clap::Args)]
@@ -82,28 +86,30 @@ pub struct OptionalPassword {
     #[clap(short, long)]
     password: Option<String>,
 
-    /// Desired length of generated passphrase in words
+    /// Desired length of generated passphrase measured in words
     #[clap(short, long)]
-    lengh: Option<usize>,
+    length: Option<usize>,
 }
 
-impl OptionalPassword {
-    pub fn lengh(&self) -> Option<usize> {
-        self.lengh
-    }
-}
-
-impl From<OptionalPassword> for Option<Vec<u8>> {
+impl From<OptionalPassword> for Vec<u8> {
     fn from(value: OptionalPassword) -> Self {
-        match (value.password, value.password_file) {
-            (Some(password), None) => Some(password.into_bytes()),
+        match (value.password, value.password_file, value.length) {
+            (Some(password), None, None) => password.into_bytes(),
 
-            (None, Some(password_file)) => Some(read(&password_file).unwrap_or_else(|_| {
+            (None, Some(password_file), None) => read(&password_file).unwrap_or_else(|_| {
                 eprintln!("Failed to load password file: {:?}", password_file);
                 exit(1);
-            })),
-            (None, None) => None,
-            (Some(_), Some(_)) => unreachable!(),
+            }),
+
+            (None, None, Some(_)) | (None, None, None) => {
+                let passphrase = generate_passphrase(value.length).into_bytes();
+                println!(
+                    "Generated passphrase: {}",
+                    core::str::from_utf8(&passphrase).unwrap()
+                );
+                passphrase
+            }
+            _ => unreachable!(),
         }
     }
 }
