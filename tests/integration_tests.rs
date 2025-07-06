@@ -124,6 +124,7 @@ fn differnt_passwords_fail() {
     remove_file("ops.shifted").unwrap();
 }
 
+const PASSPHRASE_PROMPT: &str = "Generated passphrase: ";
 #[test]
 fn generated_passphrase() {
     set_current_dir(TMPDIR).unwrap();
@@ -142,8 +143,8 @@ fn generated_passphrase() {
         dbg!(output_string);
         let pw = &output_string
             .lines()
-            .find(|l| l.contains("Generated passphrase:"))
-            .unwrap()[22..];
+            .find(|l| l.contains(PASSPHRASE_PROMPT))
+            .unwrap()[PASSPHRASE_PROMPT.len()..];
 
         remove_file("secret.png").unwrap();
 
@@ -183,8 +184,8 @@ fn generated_passphrase_length() {
         let output_string = &String::from_utf8_lossy(&output.stdout);
         let pf = &output_string
             .lines()
-            .find(|l| l.contains("Generated passphrase:"))
-            .unwrap()[22..];
+            .find(|l| l.contains(PASSPHRASE_PROMPT))
+            .unwrap()[PASSPHRASE_PROMPT.len()..];
 
         assert_eq!(pf.chars().filter(|&x| x == '-').count(), length - 1);
         remove_file("info.md").unwrap();
