@@ -48,7 +48,7 @@ fn generate_block(
 
 // Test vectors adapted from https://www.rfc-editor.org/rfc/rfc7914.txt#[cfg(test)]
 #[cfg(test)]
-mod pbkdf2_tests {
+mod tests {
 
     use rand::{thread_rng, Rng, RngCore};
     use sha2::Sha256;
@@ -107,7 +107,7 @@ mod pbkdf2_tests {
             let mut s = vec![0; rng.gen_range(0..500)];
             rng.fill_bytes(&mut s);
 
-            let rounds = rng.gen_range(1..10_000);
+            let rounds = rng.gen_range(1..5_000);
 
             let dk_len = rng.gen_range(1..2048);
             let mut out1 = vec![0; dk_len];

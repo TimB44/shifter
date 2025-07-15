@@ -121,7 +121,7 @@ pub fn sha256(message: &[u8]) -> U256 {
 }
 
 #[cfg(test)]
-mod sha256_tests {
+mod tests {
 
     use super::*;
     use rand::RngCore;

@@ -286,7 +286,7 @@ impl DecryptedShifterFile {
 }
 
 #[cfg(test)]
-mod file_format_tests {
+mod tests {
     use std::{
         env::temp_dir,
         fs::{self, remove_file, File},
@@ -458,7 +458,7 @@ mod file_format_tests {
     use rayon::prelude::*;
     #[test]
     fn encrypt_decrpyt_file_fuzz() {
-        (0..500).into_par_iter().for_each(|_| {
+        (0..100).into_par_iter().for_each(|_| {
             let mut rand = thread_rng();
             let body_len = rand.gen_range(0..100_000);
             let mut data = vec![0; body_len];

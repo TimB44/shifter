@@ -21,7 +21,7 @@ const fn split_words(mut input: &[u8]) -> [&str; WORD_COUNT] {
 
         let (word, left_over) = input.split_at(cur_byte);
 
-        //TODO: Remove the unsafe if more const is added
+        //TODO: their is probably a workaround for this unsafe
         // Saftey: Test words_valid_utf8 ensures that words are valid utf8 and ascii. This unsafe block is
         // used as unwrap is not yet a const fn
         words[cur_word] = unsafe { std::str::from_utf8_unchecked(word) };

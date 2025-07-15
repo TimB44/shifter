@@ -47,7 +47,7 @@ pub fn hmac_sha256(key: &[u8], message: &[u8]) -> U256 {
 
 /// Test vectors from https://datatracker.ietf.org/doc/html/rfc4868#autoid-14
 #[cfg(test)]
-mod hmac_sha256_tests {
+mod tests {
     use crate::crypto::hmac::hmac_sha256;
 
     #[test]

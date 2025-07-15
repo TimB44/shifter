@@ -133,7 +133,7 @@ fn generate_common_block(key: &[u8; 32], nonce: &[u8; 12]) -> ChaChaBlock {
 
 // Test vectors from https://datatracker.ietf.org/doc/rfc7539/
 #[cfg(test)]
-mod chacha20_tests {
+mod tests {
 
     use crate::crypto::chacha20::chacha20;
 
