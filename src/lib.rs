@@ -134,7 +134,6 @@ pub fn generate_encrypted_filename() -> String {
     format!("encrypted-{:?}.shifted", rand::thread_rng().next_u32())
 }
 
-//TODO: test function
 pub fn wipe_file(filename: &str) -> io::Result<()> {
     let mut file = OpenOptions::new().write(true).read(true).open(filename)?;
     let mut bytes_left = file.metadata()?.len();
@@ -151,4 +150,34 @@ pub fn wipe_file(filename: &str) -> io::Result<()> {
     remove_file(filename)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        env::{set_current_dir, temp_dir},
+        fs::{exists, write},
+    };
+
+    use rand::RngCore;
+
+    use crate::wipe_file;
+
+    #[test]
+    fn test_wipe_file_small() {
+        set_current_dir(temp_dir()).unwrap();
+        let filename: String = format!("testing-wipe-file-small-{}", rand::thread_rng().next_u64());
+        write(&filename, "this is a small file").unwrap();
+        wipe_file(&filename).unwrap();
+        assert!(!exists(&filename).unwrap())
+    }
+
+    #[test]
+    pub fn test_wipe_file_large() {
+        set_current_dir(temp_dir()).unwrap();
+        let filename: String = format!("testing-wipe-file-large-{}", rand::thread_rng().next_u64());
+        write(&filename, "this is a big file".repeat(1_234_567)).unwrap();
+        wipe_file(&filename).unwrap();
+        assert!(!exists(&filename).unwrap());
+    }
 }
