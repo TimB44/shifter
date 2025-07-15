@@ -1,5 +1,4 @@
 use std::{
-    error::Error,
     fs::{exists, read, File},
     io::{self, Read},
     process::exit,
@@ -112,7 +111,7 @@ fn get_password(generate_as_option: bool) -> io::Result<Vec<u8>> {
                     return Ok(Validation::Invalid("Must enter number".into()));
                 }
                 match count.parse::<usize>() {
-                    Ok(length) if length < MIN_PASSPHRASE_LENGTH && length > MAX_PASSPHRASE_LENGTH => Ok(Validation::Invalid(format!("Passphrase Lenght must be in range [{MIN_PASSPHRASE_LENGTH}, {MAX_PASSPHRASE_LENGTH}]").into())),
+                    Ok(length) if !(MIN_PASSPHRASE_LENGTH..=MAX_PASSPHRASE_LENGTH).contains(&length) => Ok(Validation::Invalid(format!("Passphrase Lenght must be in range [{MIN_PASSPHRASE_LENGTH}, {MAX_PASSPHRASE_LENGTH}]").into())),
                     Ok(_) =>  {
                         Ok(Validation::Valid)
                     }
@@ -149,7 +148,7 @@ struct ShifterFileMagicNumberValidtor;
 
 impl StringValidator for ShifterFileMagicNumberValidtor {
     fn validate(&self, filename: &str) -> Result<Validation, CustomUserError> {
-        let mut file = File::open(filename).map_err(|err| Box::new(err))?;
+        let mut file = File::open(filename)?;
         let mut file_magic_number = [0; SHIFTER_FILE_MAGIC_NUMBER.len()];
         file.read_exact(file_magic_number.as_mut_slice())?;
         if SHIFTER_FILE_MAGIC_NUMBER != &file_magic_number {

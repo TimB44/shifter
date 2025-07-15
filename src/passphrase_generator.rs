@@ -3,7 +3,7 @@ use core::str;
 use rand::Rng;
 
 const WORD_COUNT: usize = 9_800;
-const WORDS: [&str; WORD_COUNT] = split_words(include_bytes!("../res/words.txt"));
+static WORDS: [&str; WORD_COUNT] = split_words(include_bytes!("../res/words.txt"));
 const PASSPHRASE_GENERATOR_DELIMTER: &str = "-";
 pub const DEFAULT_PASSPHRASE_LENGTH: usize = 8;
 pub const MIN_PASSPHRASE_LENGTH: usize = 1;
@@ -36,7 +36,7 @@ const fn split_words(mut input: &[u8]) -> [&str; WORD_COUNT] {
 /// Generates a random passphrase with length number of words joined by a hypen
 pub fn generate_passphrase(length: Option<usize>) -> String {
     let length = length.unwrap_or(DEFAULT_PASSPHRASE_LENGTH);
-    assert!(length >= MIN_PASSPHRASE_LENGTH && length <= MAX_PASSPHRASE_LENGTH);
+    assert!((MIN_PASSPHRASE_LENGTH..=MAX_PASSPHRASE_LENGTH).contains(&length));
     let mut rand = rand::thread_rng();
     (0..length)
         .flat_map(|cur| {

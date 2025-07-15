@@ -134,12 +134,15 @@ pub fn generate_encrypted_filename() -> String {
     format!("encrypted-{:?}.shifted", rand::thread_rng().next_u32())
 }
 
+//TODO: test function
 pub fn wipe_file(filename: &str) -> io::Result<()> {
-    let mut file = OpenOptions::new().write(true).read(true).open(&filename)?;
-    let bytes_left = file.metadata()?.len();
-    let buf = [0; 1024];
-    while bytes_left >= 1024 {
+    let mut file = OpenOptions::new().write(true).read(true).open(filename)?;
+    let mut bytes_left = file.metadata()?.len();
+    const BUF_SIZE: usize = 2usize.pow(10);
+    let buf = [0; BUF_SIZE];
+    while bytes_left >= BUF_SIZE as u64 {
         file.write_all(&buf)?;
+        bytes_left -= BUF_SIZE as u64;
     }
 
     file.write_all(&buf[..bytes_left as usize])?;

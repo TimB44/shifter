@@ -1,4 +1,4 @@
-use std::{fs::read, process::exit, usize};
+use std::{fs::read, process::exit};
 
 use clap::{Parser, Subcommand};
 
