@@ -1,0 +1,79 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runs-on }}
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: x86_64
+            runs-on: ubuntu-latest
+            artifact-name: shifter-linux-x86_64.tar.gz
+            executable-name: shifter
+            archive-command: tar -czvf shifter-linux-x86_64.tar.gz -C target/release shifter
+          - os: linux
+            arch: arm64
+            runs-on: ubuntu-22.04-arm
+            artifact-name: shifter-linux-arm64.tar.gz
+            executable-name: shifter
+            archive-command: tar -czvf shifter-linux-arm64.tar.gz -C target/release shifter
+          - os: windows
+            arch: x86_64
+            runs-on: windows-latest
+            artifact-name: shifter-windows-x86_64.zip
+            executable-name: shifter.exe
+            archive-command: Compress-Archive -Path target\\release\\shifter.exe -DestinationPath shifter-windows-x86_64.zip
+          - os: windows
+            arch: arm64
+            runs-on: windows-11-arm
+            artifact-name: shifter-windows-arm64.zip
+            executable-name: shifter.exe
+            archive-command: Compress-Archive -Path target\\release\\shifter.exe -DestinationPath shifter-windows-arm64.zip
+          - os: macos
+            arch: x86_64
+            runs-on: macos-latest
+            artifact-name: shifter-macos-x86_64.tar.gz
+            executable-name: shifter
+            archive-command: tar -czvf shifter-macos-x86_64.tar.gz -C target/release shifter
+          - os: macos
+            arch: arm64
+            runs-on: macos-14
+            artifact-name: shifter-macos-arm64.tar.gz
+            executable-name: shifter
+            archive-command: tar -czvf shifter-macos-arm64.tar.gz -C target/release shifter
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build (release)
+        run: cargo build --release --verbose
+      - name: Archive binary
+        run: ${{ matrix.archive-command }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shifter-${{ matrix.os }}-${{ matrix.arch }}
+          path: ${{ matrix.artifact-name }}
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/shifter*
+
