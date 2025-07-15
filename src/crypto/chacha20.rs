@@ -1,3 +1,5 @@
+use super::utils::slice_xor_assign;
+
 //const CHA_CHA_WORD_SIZE: usize = 4;
 const CHA_CHA_STATE_WORD_SIZE: usize = 16;
 const CHA_CHA_STATE_BYTE_SIZE: usize = CHA_CHA_STATE_WORD_SIZE * 4;

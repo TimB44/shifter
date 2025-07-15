@@ -10,7 +10,7 @@ use thiserror::Error;
 
 use crate::crypto::{chacha20, hmac_sha256, pbkdf2, U256};
 
-const SHIFTER_FILE_MAGIC_NUMBER: &[u8; 4] = b"SHFT";
+pub const SHIFTER_FILE_MAGIC_NUMBER: &[u8; 4] = b"SHFT";
 const MIN_SUPPORTED_VERSION_NUMBER: u8 = 1;
 const MAX_SUPPORTED_VERSION_NUMBER: u8 = 1;
 const MAX_FILENAME_LENGTH: usize = 255;

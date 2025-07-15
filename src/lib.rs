@@ -81,7 +81,7 @@ pub fn decrypt(filename: String, password: &[u8]) {
         }
 
         Err(ShifterFileDecryptError::IOError(err)) => {
-            eprintln!("I/O error occurred: {:?}", err);
+            eprintln!("I/O error occurred: {}", err);
             remove_file(temp_name).expect("Could not remove temp file");
             exit(1);
         }

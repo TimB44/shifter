@@ -11,7 +11,10 @@ use std::process::exit;
 fn main() {
     let args = ShifterArgs::parse();
     match args.mode {
-        Mode::Interactive => run_iteractive(),
+        Mode::Interactive => run_iteractive().unwrap_or_else(|err| {
+            eprintln!("IO Error: {err}");
+            exit(1);
+        }),
         Mode::Encrypt {
             file,
             password,
