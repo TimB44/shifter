@@ -1,12 +1,16 @@
+use std::collections::VecDeque;
+use std::path::{Path, MAIN_SEPARATOR};
 use std::{
-    fs::{exists, read, File},
+    fs::{read, read_dir, File},
     io::{self, Read},
+    path::MAIN_SEPARATOR_STR,
     process::exit,
 };
 
+use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use inquire::{
     validator::{StringValidator, Validation},
-    CustomUserError, Password, Select, Text,
+    Autocomplete, CustomUserError, Password, Select, Text,
 };
 
 use crate::{
@@ -17,8 +21,6 @@ use crate::{
         MIN_PASSPHRASE_LENGTH,
     },
 };
-//TODO:
-// - When searching for file passwords give autocomplete
 
 pub fn run_iteractive() -> io::Result<()> {
     const ENCRYPT: &str = "Encrypt";
@@ -35,6 +37,7 @@ pub fn run_iteractive() -> io::Result<()> {
         ENCRYPT => {
             let filename = Text::new("Enter file to encrypt")
                 .with_validator(FileValidator)
+                .with_autocomplete(FileAutocomplete::default())
                 .prompt()
                 .unwrap_or_else(|err| {
                     eprintln!("Error: {err}");
@@ -48,6 +51,7 @@ pub fn run_iteractive() -> io::Result<()> {
             let filename = Text::new("Enter file to encrypt")
                 .with_validator(FileValidator)
                 .with_validator(ShifterFileMagicNumberValidtor)
+                .with_autocomplete(FileAutocomplete::default())
                 .prompt()
                 .unwrap_or_else(|err| {
                     eprintln!("Error: {err}");
@@ -83,6 +87,7 @@ fn get_password(generate_as_option: bool) -> io::Result<Vec<u8>> {
         FROM_FILE => {
             let filename = Text::new("Enter File With Password")
                 .with_validator(FileValidator)
+                .with_autocomplete(FileAutocomplete::default())
                 .prompt()
                 .unwrap_or_else(|err| {
                     eprintln!("Error: {err}");
@@ -134,12 +139,17 @@ fn get_password(generate_as_option: bool) -> io::Result<Vec<u8>> {
 struct FileValidator;
 
 impl StringValidator for FileValidator {
-    fn validate(&self, filename: &str) -> Result<Validation, CustomUserError> {
-        Ok(if exists(filename)? {
-            Validation::Valid
+    fn validate(&self, input: &str) -> Result<Validation, CustomUserError> {
+        let path = Path::new(input);
+        let validation = if !path.exists() {
+            Validation::Invalid(format!("Could not find file: {input}").into())
+        } else if !path.is_file() {
+            Validation::Invalid(format!("Expected file, found directory: {input}").into())
         } else {
-            Validation::Invalid(format!("Could not find file: {filename}").into())
-        })
+            Validation::Valid
+        };
+
+        Ok(validation)
     }
 }
 
@@ -148,15 +158,121 @@ struct ShifterFileMagicNumberValidtor;
 
 impl StringValidator for ShifterFileMagicNumberValidtor {
     fn validate(&self, filename: &str) -> Result<Validation, CustomUserError> {
-        let mut file = File::open(filename)?;
-        let mut file_magic_number = [0; SHIFTER_FILE_MAGIC_NUMBER.len()];
-        file.read_exact(file_magic_number.as_mut_slice())?;
-        if SHIFTER_FILE_MAGIC_NUMBER != &file_magic_number {
-            Ok(Validation::Invalid(
-                "Given file not in correct format".into(),
-            ))
-        } else {
-            Ok(Validation::Valid)
+        fn try_validate(filename: &str) -> io::Result<Validation> {
+            let mut file = File::open(filename)?;
+            let mut file_magic_number = [0; SHIFTER_FILE_MAGIC_NUMBER.len()];
+            file.read_exact(file_magic_number.as_mut_slice())?;
+            if SHIFTER_FILE_MAGIC_NUMBER != &file_magic_number {
+                Ok(Validation::Invalid(
+                    "Given file not in correct format".into(),
+                ))
+            } else {
+                Ok(Validation::Valid)
+            }
         }
+
+        Ok(try_validate(filename).unwrap_or_else(|err| {
+            Validation::Invalid(format!("Error reading '{}': {}", filename, err).into())
+        }))
+    }
+}
+
+//TOOD: possibly improve performance with caching
+#[derive(Clone, Default)]
+struct FileAutocomplete {
+    prev_suggestions: Vec<String>,
+    last_chosen_suggestion: Option<usize>,
+}
+
+impl FileAutocomplete {
+    fn get_filename_parts(filename: &str) -> (&str, &str) {
+        match filename.chars().rev().position(|c| c == MAIN_SEPARATOR) {
+            Some(rev_i) => {
+                let i = filename.chars().count() - rev_i - 1;
+                (&filename[..i + 1], &filename[i + 1..])
+            }
+            None => ("", filename),
+        }
+    }
+
+    fn list_matching_files(dir: &str, pattern: &str) -> io::Result<Vec<String>> {
+        let names: Vec<_> = read_dir(if dir.is_empty() { "." } else { dir })?
+            .into_iter()
+            .filter_map(Result::ok)
+            .map(|dir_entry| {
+                dir_entry.file_name().to_string_lossy().into_owned()
+                    + if dir_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+                        MAIN_SEPARATOR_STR
+                    } else {
+                        ""
+                    }
+            })
+            .collect();
+
+        let matcher = SkimMatcherV2::default();
+        let mut search_results: Vec<_> = names
+            .into_iter()
+            .filter_map(|name| {
+                matcher
+                    .fuzzy_match(&name, pattern)
+                    .map(|score| (name, score))
+            })
+            .collect();
+
+        search_results.sort_by(|(lhs_str, lhs_similarity), (rhs_str, rhs_similarity)| {
+            rhs_similarity
+                .cmp(&lhs_similarity)
+                // TODO: sort by alpha first then others also to_lowercase is bad
+                .then_with(|| lhs_str.to_lowercase().cmp(&rhs_str.to_lowercase()))
+        });
+
+        Ok(search_results.into_iter().map(|(name, _)| name).collect())
+    }
+}
+
+impl Autocomplete for FileAutocomplete {
+    fn get_suggestions(&mut self, input: &str) -> Result<Vec<String>, CustomUserError> {
+        let (dir, filename) = FileAutocomplete::get_filename_parts(input);
+        let suggestions: Vec<String> = FileAutocomplete::list_matching_files(dir, filename)
+            .unwrap_or(vec![])
+            .into_iter()
+            .collect();
+
+        self.prev_suggestions = suggestions.clone();
+        Ok(suggestions)
+    }
+
+    fn get_completion(
+        &mut self,
+        input: &str,
+        highlighted_suggestion: Option<String>,
+    ) -> Result<inquire::autocompletion::Replacement, CustomUserError> {
+        let (dir, _) = Self::get_filename_parts(input);
+        let suggestion = if let Some(highlighted_suggestion) = highlighted_suggestion {
+            self.last_chosen_suggestion = Some(
+                self.prev_suggestions
+                    .iter()
+                    .position(|s| *s == highlighted_suggestion)
+                    .expect("highlighted_suggestion should be in previous suggestions"),
+            );
+            Some(highlighted_suggestion)
+        } else if !self.prev_suggestions.is_empty() {
+            let next_suggestion = self
+                .last_chosen_suggestion
+                .map(|n| (n + 1) % self.prev_suggestions.len())
+                .unwrap_or(0);
+            self.last_chosen_suggestion = Some(next_suggestion);
+            Some(self.prev_suggestions[next_suggestion].clone())
+        } else {
+            None
+        };
+
+        Ok(suggestion.map(|mut file| {
+            file.insert_str(0, dir);
+            if matches!(file.chars().last(), Some(MAIN_SEPARATOR)) {
+                file.pop();
+            }
+            file
+        }))
     }
 }
