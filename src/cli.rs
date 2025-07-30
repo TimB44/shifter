@@ -1,12 +1,16 @@
 use std::{fs::read, process::exit};
 
 use clap::{Parser, Subcommand};
+use styling::CLAP_STYLING;
 
 use crate::passphrase_generator::generate_passphrase;
+
+mod styling;
 
 #[derive(Debug, Parser)]
 #[command(name = "shifter")]
 #[command(about,version, long_about = None)]
+#[clap(styles = CLAP_STYLING)]
 pub struct ShifterArgs {
     #[command(subcommand)]
     pub mode: Mode,

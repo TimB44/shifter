@@ -2,6 +2,7 @@
 name = "shifter"
 version = "0.1.0"
 edition = "2021"
+description = "File encryption tool"
 
 [dependencies]
 rand = "0.8.5"
@@ -10,6 +11,7 @@ rayon = "1.10.0"
 clap = { version = "4.5.23", features = ["derive"] }
 inquire = "0.7.5"
 fuzzy-matcher = "0.3.7"
+anstyle = "1.0.11"
 
 # Used for differential fuzz testing
 [dev-dependencies]
