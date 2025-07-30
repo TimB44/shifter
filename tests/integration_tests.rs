@@ -234,3 +234,40 @@ fn delete_flag() {
     assert!(!exists("del.shifted").unwrap());
     remove_file("del.txt").unwrap();
 }
+
+#[test]
+fn interactive_mode() {
+    set_current_dir(TMPDIR).unwrap();
+
+    let file_contents = b"some secret stuff";
+    let password = "my-password-123";
+    let input_filename = "interactive.txt";
+    let output_filename = "interactive.shifted";
+    write("interactive.txt", file_contents).unwrap();
+    let mut encrypt_command = Command::cargo_bin("shifter").unwrap();
+    encrypt_command.args(["interactive"]);
+    encrypt_command.write_stdin(format!(
+        "Encrypt\n{input_filename}\nEnter as Text\n{password}\n{password}\n{output_filename}\ny\n"
+    ));
+
+    encrypt_command.assert().success();
+
+    assert!(!exists(input_filename).unwrap());
+    assert!(exists(output_filename).unwrap());
+    let mut decrypt_command = Command::cargo_bin("shifter").unwrap();
+    decrypt_command.args(["i"]);
+    encrypt_command.write_stdin(format!(
+        "Decrypt\n{output_filename}\nEnter as Text\n{password}\n{password}\nn\n"
+    ));
+    decrypt_command.assert().success();
+
+    assert_eq!(
+        &file_contents,
+        &std::fs::read(input_filename).unwrap().as_slice()
+    );
+
+    assert!(exists(input_filename).unwrap());
+    assert!(exists(output_filename).unwrap());
+    remove_file(input_filename).unwrap();
+    remove_file(output_filename).unwrap();
+}
