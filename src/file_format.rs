@@ -325,12 +325,12 @@ mod tests {
         file.write_all(&data).unwrap();
         fs::write(path.clone(), data.clone()).unwrap();
 
-        assert!(match EncryptedShifterFile::load_from_file(file) {
+        assert!(matches!(
+            EncryptedShifterFile::load_from_file(file),
             Err(ShifterFileParseError::IncorrectMagicNumber {
                 actual_magic_number: mn,
-            }) if mn == incorrect_magic_number => true,
-            _ => false,
-        });
+            }) if mn == incorrect_magic_number
+        ));
         remove_file(path).unwrap();
     }
 
@@ -361,12 +361,12 @@ mod tests {
             let mut file = File::create_new(path.clone()).unwrap();
             file.write_all(&data).unwrap();
 
-            assert!(match EncryptedShifterFile::load_from_file(file) {
-                Err(ShifterFileParseError::IncorrectVersionNumber { actual_verion: v })
-                    if v == version =>
-                    true,
-                _ => false,
-            });
+            assert!(matches!(
+                EncryptedShifterFile::load_from_file(file),
+                Err(ShifterFileParseError::IncorrectVersionNumber {
+                    actual_verion: v
+                }) if v == version
+            ));
             remove_file(path).unwrap();
         }
     }

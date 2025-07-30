@@ -130,6 +130,7 @@ pub fn generate_decrypted_filename() -> String {
     format!("decrypted-file-{:?}", rand::thread_rng().next_u32())
 }
 
+//TODO make this better count up instaed of always random
 pub fn generate_encrypted_filename() -> String {
     format!("encrypted-{:?}.shifted", rand::thread_rng().next_u32())
 }

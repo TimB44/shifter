@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::path::{Path, MAIN_SEPARATOR};
 use std::{
     fs::{read, read_dir, File},
@@ -8,6 +7,7 @@ use std::{
 };
 
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
+use inquire::Confirm;
 use inquire::{
     validator::{StringValidator, Validation},
     Autocomplete, CustomUserError, Password, Select, Text,
@@ -21,6 +21,7 @@ use crate::{
         MIN_PASSPHRASE_LENGTH,
     },
 };
+use crate::{generate_encrypted_filename, wipe_file};
 
 pub fn run_iteractive() -> io::Result<()> {
     const ENCRYPT: &str = "Encrypt";
@@ -35,7 +36,7 @@ pub fn run_iteractive() -> io::Result<()> {
 
     match mode {
         ENCRYPT => {
-            let filename = Text::new("Enter file to encrypt")
+            let input_filename = Text::new("Enter file to encrypt")
                 .with_validator(FileValidator)
                 .with_autocomplete(FileAutocomplete::default())
                 .prompt()
@@ -45,10 +46,19 @@ pub fn run_iteractive() -> io::Result<()> {
                 });
 
             let password = get_password(true)?;
-            encrypt(filename.clone(), &password, None);
+            let output_filename = Text::new("Enter filename")
+                .with_autocomplete(FileAutocomplete::default())
+                .with_default(&generate_encrypted_filename())
+                .prompt()
+                .unwrap_or_else(|err| {
+                    eprintln!("Error: {err}");
+                    exit(1);
+                });
+            encrypt(input_filename.clone(), &password, Some(output_filename));
+            ask_wipe_input_file(&input_filename);
         }
         DECRYPT => {
-            let filename = Text::new("Enter file to encrypt")
+            let input_filename = Text::new("Enter file to encrypt")
                 .with_validator(FileValidator)
                 .with_validator(ShifterFileMagicNumberValidtor)
                 .with_autocomplete(FileAutocomplete::default())
@@ -59,11 +69,28 @@ pub fn run_iteractive() -> io::Result<()> {
                 });
 
             let password = get_password(false)?;
-            decrypt(filename.clone(), &password);
+            decrypt(input_filename.clone(), &password);
+            ask_wipe_input_file(&input_filename);
         }
         _ => unreachable!(),
     };
     Ok(())
+}
+
+fn ask_wipe_input_file(input_filename: &str) {
+    if Confirm::new(&format!("Delete file {input_filename}"))
+        .with_default(true)
+        .prompt()
+        .unwrap_or_else(|err| {
+            eprintln!("Error: {err}");
+            exit(1);
+        })
+    {
+        wipe_file(input_filename).unwrap_or_else(|err| {
+            eprintln!("Error: {err}");
+            exit(1);
+        })
+    }
 }
 
 fn get_password(generate_as_option: bool) -> io::Result<Vec<u8>> {
@@ -197,7 +224,6 @@ impl FileAutocomplete {
 
     fn list_matching_files(dir: &str, pattern: &str) -> io::Result<Vec<String>> {
         let names: Vec<_> = read_dir(if dir.is_empty() { "." } else { dir })?
-            .into_iter()
             .filter_map(Result::ok)
             .map(|dir_entry| {
                 dir_entry.file_name().to_string_lossy().into_owned()
@@ -221,7 +247,7 @@ impl FileAutocomplete {
 
         search_results.sort_by(|(lhs_str, lhs_similarity), (rhs_str, rhs_similarity)| {
             rhs_similarity
-                .cmp(&lhs_similarity)
+                .cmp(lhs_similarity)
                 // TODO: sort by alpha first then others also to_lowercase is bad
                 .then_with(|| lhs_str.to_lowercase().cmp(&rhs_str.to_lowercase()))
         });
@@ -234,7 +260,7 @@ impl Autocomplete for FileAutocomplete {
     fn get_suggestions(&mut self, input: &str) -> Result<Vec<String>, CustomUserError> {
         let (dir, filename) = FileAutocomplete::get_filename_parts(input);
         let suggestions: Vec<String> = FileAutocomplete::list_matching_files(dir, filename)
-            .unwrap_or(vec![])
+            .unwrap_or_default()
             .into_iter()
             .collect();
 
