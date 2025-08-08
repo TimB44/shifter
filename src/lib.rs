@@ -1,6 +1,7 @@
 //TODO: use tempfile create
 use std::{
-    fs::{remove_file, rename, File, OpenOptions},
+    borrow::Cow,
+    fs::{exists, remove_file, rename, File, OpenOptions},
     io::{self, prelude::*},
     process::exit,
 };
@@ -112,27 +113,44 @@ pub fn encrypt(filename: String, password: &[u8], output_filename: Option<String
     });
     let mut df = DecryptedShifterFile { filename, contents };
 
-    let out_name = output_filename.unwrap_or_else(generate_encrypted_filename);
-    let out = File::create(&out_name).unwrap_or_else(|err| {
+    let out_name = output_filename
+        .map(String::into)
+        .unwrap_or_else(generate_encrypted_filename);
+    let out = File::create(out_name.as_ref()).unwrap_or_else(|err| {
         eprintln!("Could not create output file");
         eprintln!("Error: {err:?}");
         exit(1);
     });
     df.encrypt(password, out).unwrap_or_else(|err| {
-        eprintln!("I/O error occurred: {:?}", err);
+        eprintln!("I/O error occurred: {}", err);
         exit(1);
     });
 
-    println!("Encrypted file written to: {:?}", out_name)
+    println!("Encrypted file written to: {}", out_name.as_ref())
 }
 
 pub fn generate_decrypted_filename() -> String {
     format!("decrypted-file-{:?}", rand::thread_rng().next_u32())
 }
 
-//TODO make this better count up instaed of always random
-pub fn generate_encrypted_filename() -> String {
-    format!("encrypted-{:?}.shifted", rand::thread_rng().next_u32())
+pub fn generate_encrypted_filename() -> Cow<'static, str> {
+    let mut counter = 0;
+    loop {
+        let filename: Cow<'static, str> = if counter == 0 {
+            Cow::Borrowed("encrypted-{}.shifted")
+        } else {
+            Cow::Owned(format!("encrypted-{}.shifted", counter))
+        };
+        match exists(filename.as_ref()) {
+            Ok(true) => {
+                counter += 1;
+                continue;
+            }
+            Ok(false) => break filename,
+            // Use random as fallback
+            Err(_) => break format!("encrypted-{}.shifted", rand::thread_rng().next_u32()).into(),
+        }
+    }
 }
 
 pub fn wipe_file(filename: &str) -> io::Result<()> {
