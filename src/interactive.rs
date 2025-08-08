@@ -1,3 +1,4 @@
+use std::char::ToLowercase;
 use std::path::{Path, MAIN_SEPARATOR};
 use std::{
     fs::{read, read_dir, File},
@@ -246,10 +247,39 @@ impl FileAutocomplete {
             .collect();
 
         search_results.sort_by(|(lhs_str, lhs_similarity), (rhs_str, rhs_similarity)| {
-            rhs_similarity
-                .cmp(lhs_similarity)
-                // TODO: sort by alpha first then others also to_lowercase is bad
-                .then_with(|| lhs_str.to_lowercase().cmp(&rhs_str.to_lowercase()))
+            lhs_similarity
+                .cmp(rhs_similarity)
+                .reverse()
+                // sort by alpha first then others
+                .then_with(|| {
+                    fn str_to_cmp_key_iter<'a>(
+                        s: &'a str,
+                    ) -> impl Iterator<Item = (u32, Option<char>, char)> + 'a {
+                        s.chars().map(|c| {
+                            (
+                                if c.is_ascii_alphabetic() { 0 } else { 1 },
+                                //TODO: not ideal
+                                c.to_lowercase().next(),
+                                c,
+                            )
+                        })
+                    }
+                    str_to_cmp_key_iter(&lhs_str).cmp(str_to_cmp_key_iter(&rhs_str))
+                })
+            //
+            //     fn str_to_alpha_first_iter<'a>(s: &'a str) -> impl Iterator<Item = i32> + 'a {
+            //         s.chars()
+            //             .map(|c| if c.is_ascii_alphabetic() { 0 } else { 1 })
+            //     }
+            //     str_to_alpha_first_iter(&lhs_str).cmp(str_to_alpha_first_iter(&rhs_str))
+            // })
+            // .then_with(|| {
+            //     fn str_to_lower_iter<'a>(s: &'a str) -> impl Iterator<Item = char> + 'a {
+            //         s.chars().map(|c| c.to_lowercase()).flatten()
+            //     }
+            //     str_to_lower_iter(&lhs_str).cmp(str_to_lower_iter(&rhs_str))
+            // })
+            // .then_with(|| lhs_str.cmp(rhs_str))
         });
 
         Ok(search_results.into_iter().map(|(name, _)| name).collect())
