@@ -28,7 +28,7 @@ pub fn decrypt(filename: String, password: &[u8]) {
     let mut parsed_file = match EncryptedShifterFile::load_from_file(encrypted_file) {
         Ok(pf) => pf,
         Err(ShifterFileParseError::ReadError(err)) => {
-            eprintln!("Error reading encrypted file: {err:?}");
+            eprintln!("Error reading encrypted file: {err}");
             exit(1);
         }
         Err(ShifterFileParseError::IncorrectMagicNumber {
@@ -47,7 +47,7 @@ pub fn decrypt(filename: String, password: &[u8]) {
     let temp_name = generate_decrypted_filename();
     let out = File::create(&temp_name).unwrap_or_else(|err| {
         eprintln!("Could not open output file");
-        eprintln!("Error: {err:?}");
+        eprintln!("Error: {err}");
         exit(1);
     });
 
@@ -118,7 +118,7 @@ pub fn encrypt(filename: String, password: &[u8], output_filename: Option<String
         .unwrap_or_else(generate_encrypted_filename);
     let out = File::create(out_name.as_ref()).unwrap_or_else(|err| {
         eprintln!("Could not create output file");
-        eprintln!("Error: {err:?}");
+        eprintln!("Error: {err}");
         exit(1);
     });
     df.encrypt(password, out).unwrap_or_else(|err| {
@@ -130,7 +130,7 @@ pub fn encrypt(filename: String, password: &[u8], output_filename: Option<String
 }
 
 pub fn generate_decrypted_filename() -> String {
-    format!("decrypted-file-{:?}", rand::thread_rng().next_u32())
+    format!("decrypted-file-{}", rand::thread_rng().next_u32())
 }
 
 pub fn generate_encrypted_filename() -> Cow<'static, str> {

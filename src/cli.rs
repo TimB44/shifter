@@ -70,7 +70,7 @@ impl From<RequiredPassword> for Vec<u8> {
             (Some(password), None) => password.into_bytes(),
 
             (None, Some(password_file)) => read(&password_file).unwrap_or_else(|_| {
-                eprintln!("Failed to load password file: {:?}", password_file);
+                eprintln!("Failed to load password file: {}", password_file);
                 exit(1);
             }),
 
@@ -101,7 +101,7 @@ impl From<OptionalPassword> for Vec<u8> {
             (Some(password), None, None) => password.into_bytes(),
 
             (None, Some(password_file), None) => read(&password_file).unwrap_or_else(|_| {
-                eprintln!("Failed to load password file: {:?}", password_file);
+                eprintln!("Failed to load password file: {}", password_file);
                 exit(1);
             }),
 
